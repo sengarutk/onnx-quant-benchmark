@@ -69,7 +69,7 @@ The benchmark intentionally evaluates two distinct computational and topological
 | Runtime Engine | Execution Provider / Backend | Supported Precisions | Testbed Status in v1.0 | Implementation Module |
 | :--- | :--- | :---: | :---: | :--- |
 | **PyTorch** | `PyTorch_CPU` | FP32 | ✅ Fully Benchmarked | `src/runtimes/pytorch_runtime.py` |
-| **PyTorch** | `PyTorch_CUDA:0` | FP32, FP16 | ✅ Fully Benchmarked | `src/runtimes/pytorch_runtime.py` |
+| **PyTorch** | `PyTorch_CUDA:0` | FP32 | ✅ Fully Benchmarked | `src/runtimes/pytorch_runtime.py` |
 | **ONNX Runtime** | `CPUExecutionProvider` | FP32, INT8 (QDQ) | ✅ Fully Benchmarked | `src/runtimes/ort_cpu_runtime.py` |
 | **ONNX Runtime** | `CUDAExecutionProvider` | FP32, FP16 | ⚠️ Architecture Ready (Unit Tested; Excluded from v1.0 headline tables) | `src/runtimes/ort_cuda_runtime.py` |
 | **TensorRT** | `TensorRT Execution Provider` / Standalone Engine | FP32, FP16, INT8 | ⚠️ Architecture Ready (Mock Tested) | `src/runtimes/tensorrt_runtime.py` |
