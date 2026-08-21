@@ -53,23 +53,23 @@ def synthesize_decision_matrix(df: pd.DataFrame, output_path: Optional[Path] = N
         cpu_runs = df[df["provider"].astype(str).str.lower().str.contains("cpu", na=False)].copy()
         if not cpu_runs.empty:
             fastest_cpu = cpu_runs.sort_values(by="p50_model_ms").iloc[0]
-            rec_b = f"| **Scenario B: Edge Gateway / IPC (CPU-Only)** | CPU Only (No Dedicated GPU) | {fastest_cpu['runtime']} ({fastest_cpu['provider']}) | {str(fastest_cpu['precision']).upper()} | Achieves optimal CPU latency ({fastest_cpu['p50_model_ms']:.2f} ms $p_{{50}}$) utilizing physical core binding and OpenMP thread limitation. |"
+            rec_b = f"| **Scenario B: Edge Gateway / IPC (CPU-Only)** | CPU Only (No Dedicated GPU) | {fastest_cpu['runtime']} ({fastest_cpu['provider']}) | {str(fastest_cpu['precision']).upper()} | Thread-limited ONNX Runtime CPU execution bounds parallelism to physical-core capacity and reduces oversubscription variability on this testbed ({fastest_cpu['p50_model_ms']:.2f} ms $p_{{50}}$). |"
         else:
-            rec_b = "| **Scenario B: Edge Gateway / IPC (CPU-Only)** | CPU Only (No Dedicated GPU) | ORT_CPU | INT8 | OpenMP thread-limited ORT CPU with symmetric INT8 quantization maximizes core IPC. |"
+            rec_b = "| **Scenario B: Edge Gateway / IPC (CPU-Only)** | CPU Only (No Dedicated GPU) | ORT_CPU | INT8 | Thread-limited ONNX Runtime CPU execution bounds parallelism to physical-core capacity and reduces oversubscription variability on this testbed. |"
         lines.append(rec_b)
 
         # Scenario C: High-Fidelity Anomaly Inspection (Reconstruction: Autoencoder)
         anomaly_fp = df[(df["model"].astype(str) == "industrial_autoencoder") & (df["precision"].astype(str).str.lower().isin(["fp32", "fp16"]))].copy()
         if not anomaly_fp.empty:
             best_quality = anomaly_fp.sort_values(by=["quality_value", "p50_e2e_ms"], ascending=[False, True]).iloc[0]
-            rec_c = f"| **Scenario C: High-Fidelity Anomaly Inspection (Autoencoder)** | High-Fidelity Anomaly-Map Preservation | {best_quality['runtime']} ({best_quality['provider']}) | {str(best_quality['precision']).upper()} | Preserves continuous pixel-level dynamic range (AUROC={best_quality['quality_value']:.4f}, $\\Delta={best_quality['quality_delta']:+.4f}$, {best_quality['p50_model_ms']:.2f} ms $p_{{50}}$) via FP32 by eliminating quantization clipping. |"
+            rec_c = f"| **Scenario C: High-Fidelity Anomaly Inspection (Autoencoder)** | High-Fidelity Anomaly-Map Preservation | {best_quality['runtime']} ({best_quality['provider']}) | {str(best_quality['precision']).upper()} | Controlled anomaly-map fidelity retained under the synthetic evaluation protocol (\\Delta={best_quality['quality_delta']:+.4f}, {best_quality['p50_model_ms']:.2f} ms $p_{{50}}$) via FP32 by eliminating quantization clipping. (Note: This is not a claim of industrial defect-detection accuracy; real-data task-quality retention is deferred to a future MVTec-linked extension). |"
         else:
-            rec_c = "| **Scenario C: High-Fidelity Anomaly Inspection (Autoencoder)** | High-Fidelity Anomaly-Map Preservation | PyTorch (PyTorch_CUDA:0) | FP32 | Preserves continuous pixel-level dynamic range (AUROC=1.0000, $\\Delta=+0.0000$) by eliminating integer quantization clipping. |"
+            rec_c = "| **Scenario C: High-Fidelity Anomaly Inspection (Autoencoder)** | High-Fidelity Anomaly-Map Preservation | PyTorch (PyTorch_CUDA:0) | FP32 | Controlled anomaly-map fidelity retained under the synthetic evaluation protocol (\\Delta=+0.0000) via FP32 by eliminating quantization clipping. (Note: This is not a claim of industrial defect-detection accuracy; real-data task-quality retention is deferred to a future MVTec-linked extension). |"
         lines.append(rec_c)
 
         # Scenario D: High-Throughput Offline Batch
         best_fps = df.sort_values(by="model_throughput_fps", ascending=False).iloc[0]
-        rec_d = f"| **Scenario D: High-Throughput Offline Batch** | Highest Measured Throughput under Benchmark Conditions | {best_fps['runtime']} ({best_fps['provider']}) | {str(best_fps['precision']).upper()} | Delivers highest measured throughput ({best_fps['model_throughput_fps']:.1f} FPS) with minimum memory footprint ({best_fps['peak_vram_mb']:.1f} MB VRAM). |"
+        rec_d = f"| **Scenario D: High-Throughput Offline Batch** | Highest Measured Throughput under Benchmark Conditions | {best_fps['runtime']} ({best_fps['provider']}) | {str(best_fps['precision']).upper()} | Delivered the highest measured throughput among v1.0 tested configurations on the disclosed testbed ({best_fps['model_throughput_fps']:.1f} FPS) with minimal memory footprint ({best_fps['peak_vram_mb']:.1f} MB VRAM). |"
         lines.append(rec_d)
 
     lines.extend([

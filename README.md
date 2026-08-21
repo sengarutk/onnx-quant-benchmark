@@ -16,6 +16,7 @@
 > - **Hardware & Host Disclosure**: Evaluated on an NVIDIA GeForce RTX 4050 Laptop GPU (6GB VRAM, CUDA 12.1) and Intel Core i7 processor (8 physical cores) running under Ubuntu 22.04 LTS on Windows Subsystem for Linux 2 (WSL2).
 > - **TensorRT Status Disclosure**: Full TensorRT engine building and runtime adapter modules (`src/quantization/build_trt_engine.py` and `src/runtimes/tensorrt_runtime.py`) are implemented, packaged, and verified via unit tests with mock fallbacks. However, live TensorRT runtime execution records are excluded from v1.0 benchmark tables due to host WSL2 execution provider constraints.
 > - **Evaluation Dataset Scope**: Synthetic evaluation datasets ($640\times 640$ detection scenes with geometric objects and $256\times 256$ industrial textures with pixel masks) are utilized for deterministic reproducibility and precision drift audits.
+> - **Edge Workload Definition**: Here, 'edge' refers to latency- and resource-constrained single-stream (Batch Size = 1) inference workflows. These measurements are collected on a host workstation GPU testbed and do not constitute physical Jetson, IPC, smart-camera, or industrial PLC controller benchmarks.
 
 ---
 
