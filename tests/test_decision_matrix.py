@@ -57,7 +57,7 @@ class TestDecisionMatrix:
         doc = synthesize_decision_matrix(df, out_path)
 
         assert out_path.is_file()
-        assert "Scenario A: Real-Time Inline Sorting" in doc
+        assert "Scenario A: Low-Latency Target" in doc
         assert "Scenario B: Edge Gateway / IPC" in doc
         assert "Scenario C: High-Fidelity Anomaly Inspection" in doc
         assert "Scenario D: High-Throughput Offline Batch" in doc

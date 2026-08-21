@@ -43,5 +43,5 @@ This report documents the verification, simplification, and numerical parity aud
 
 ## 5. Artifact Inventory
 
-- `models/exported/yolo_nano_fp32_opset17.onnx` (`SHA-256`: `aa9943abcb15d1d4572d0f251b7ac0038d284f77b0e74577fa87fb18a517fbea`)
-- `models/exported/industrial_autoencoder_fp32_opset17.onnx` (`SHA-256`: `3ff6119387601c3286db41cd92bd84cd94f4f8eb28d41f61ac49946e73471c8a`)
+- `models/exported/yolo_nano_fp32_opset17.onnx` (`SHA-256`: `b3a647bfd1b782caf55a35c4059f2b23dfc504156553cfd51f9e7d1d38a350b7`)
+- `models/exported/industrial_autoencoder_fp32_opset17.onnx` (`SHA-256`: `14279950242a5d1929cdd428db51452b24468e40515b09578d9f424de6cc5b0f`)

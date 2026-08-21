@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this benchmark suite or methodology in your research or edge deployment, please cite it as below."
-title: "ONNX Edge Inference Benchmark: A Systematic Study of Edge Deployment Trade-offs"
+title: "ONNX Runtime Edge Inference and Static INT8 PTQ Benchmark Suite: A Systematic Study of Edge Deployment Trade-offs"
 authors:
   - family-names: "Sengar"
     given-names: "Ayush"
@@ -11,7 +11,6 @@ keywords:
   - "deep-learning"
   - "onnx"
   - "onnx-runtime"
-  - "tensorrt"
   - "quantization"
   - "int8"
   - "fp16"

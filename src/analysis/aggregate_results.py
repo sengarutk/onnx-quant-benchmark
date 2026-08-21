@@ -1,5 +1,5 @@
 """
-Data Aggregation & Metrics Normalization Engine.
+Data Aggregation & Metrics Normalization Engine with Manifest Deduplication.
 """
 
 import json
@@ -19,6 +19,7 @@ def aggregate_benchmark_runs(
 ) -> pd.DataFrame:
     """
     Ingests all serialized JSON run records from results/raw/<run_id>/run.json,
+    deduplicates multiple executions by retaining the newest run per (model, runtime, provider, precision),
     computes analytical derivations (speedup, compression, quality deltas),
     and produces a consolidated DataFrame.
 

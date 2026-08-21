@@ -40,20 +40,20 @@ def synthesize_decision_matrix(df: pd.DataFrame, output_path: Optional[Path] = N
     if df.empty:
         lines.append("| Default Scenario | Default | ORT_CPU | FP32 | Awaiting benchmark execution data. |")
     else:
-        # Scenario A: Real-Time Inline Sorting (Object Detector: YOLO Nano)
+        # Scenario A: Low-Latency Target (Object Detector: YOLO Nano)
         det_cuda = df[(df["model"].astype(str) == "yolo_nano") & (df["provider"].astype(str).str.lower().str.contains("cuda|tensorrt", na=False))].copy()
         if not det_cuda.empty:
             fastest_cuda = det_cuda.sort_values(by="p50_e2e_ms").iloc[0]
-            rec_a = f"| **Scenario A: Real-Time Inline Sorting (Detector)** | Hard Deadline $< 10\\text{{ ms}}$ (Target: YOLO Nano) | {fastest_cuda['runtime']} ({fastest_cuda['provider']}) | {str(fastest_cuda['precision']).upper()} | Delivers lowest E2E latency ({fastest_cuda['p50_e2e_ms']:.2f} ms $p_{{50}}$, {fastest_cuda['p50_model_ms']:.2f} ms model) with zero-copy IOBinding ({fastest_cuda['model_throughput_fps']:.1f} FPS). |"
+            rec_a = f"| **Scenario A: Low-Latency Target (Detector)** | Sub-10ms Measured E2E Target on Disclosed Testbed (Target: YOLO Nano) | {fastest_cuda['runtime']} ({fastest_cuda['provider']}) | {str(fastest_cuda['precision']).upper()} | Meets sub-10ms measured E2E latency ({fastest_cuda['p50_e2e_ms']:.2f} ms $p_{{50}}$, {fastest_cuda['p50_model_ms']:.2f} ms model) on the disclosed RTX 4050 laptop-GPU testbed ({fastest_cuda['model_throughput_fps']:.1f} FPS). |"
         else:
-            rec_a = "| **Scenario A: Real-Time Inline Sorting (Detector)** | Hard Deadline $< 10\\text{ ms}$ (Target: YOLO Nano) | PyTorch (PyTorch_CUDA:0) | FP32 | Sub-10ms bound achieved using CUDA stream sharing with zero-copy IOBinding. |"
+            rec_a = "| **Scenario A: Low-Latency Target (Detector)** | Sub-10ms Measured E2E Target on Disclosed Testbed (Target: YOLO Nano) | PyTorch (PyTorch_CUDA:0) | FP32 | Sub-10ms bound measured on the disclosed GPU testbed. |"
         lines.append(rec_a)
 
         # Scenario B: Edge Gateway / IPC (Detector & Anomaly: CPU-Only)
         cpu_runs = df[df["provider"].astype(str).str.lower().str.contains("cpu", na=False)].copy()
         if not cpu_runs.empty:
             fastest_cpu = cpu_runs.sort_values(by="p50_model_ms").iloc[0]
-            rec_b = f"| **Scenario B: Edge Gateway / IPC (CPU-Only)** | CPU Only (No Dedicated GPU) | {fastest_cpu['runtime']} ({fastest_cpu['provider']}) | {str(fastest_cpu['precision']).upper()} | Achieves optimal CPU latency ({fastest_cpu['p50_model_ms']:.2f} ms $p_{{50}}$) utilizing physical core binding and thread suppression. |"
+            rec_b = f"| **Scenario B: Edge Gateway / IPC (CPU-Only)** | CPU Only (No Dedicated GPU) | {fastest_cpu['runtime']} ({fastest_cpu['provider']}) | {str(fastest_cpu['precision']).upper()} | Achieves optimal CPU latency ({fastest_cpu['p50_model_ms']:.2f} ms $p_{{50}}$) utilizing physical core binding and OpenMP thread limitation. |"
         else:
             rec_b = "| **Scenario B: Edge Gateway / IPC (CPU-Only)** | CPU Only (No Dedicated GPU) | ORT_CPU | INT8 | OpenMP thread-limited ORT CPU with symmetric INT8 quantization maximizes core IPC. |"
         lines.append(rec_b)
@@ -62,14 +62,14 @@ def synthesize_decision_matrix(df: pd.DataFrame, output_path: Optional[Path] = N
         anomaly_fp = df[(df["model"].astype(str) == "industrial_autoencoder") & (df["precision"].astype(str).str.lower().isin(["fp32", "fp16"]))].copy()
         if not anomaly_fp.empty:
             best_quality = anomaly_fp.sort_values(by=["quality_value", "p50_e2e_ms"], ascending=[False, True]).iloc[0]
-            rec_c = f"| **Scenario C: High-Fidelity Anomaly Inspection (Autoencoder)** | Zero Defect Tolerance (Reconstruction Fidelity) | {best_quality['runtime']} ({best_quality['provider']}) | {str(best_quality['precision']).upper()} | Preserves continuous pixel-level dynamic range (AUROC={best_quality['quality_value']:.4f}, $\\Delta={best_quality['quality_delta']:+.4f}$, {best_quality['p50_model_ms']:.2f} ms $p_{{50}}$) by eliminating quantization clipping. |"
+            rec_c = f"| **Scenario C: High-Fidelity Anomaly Inspection (Autoencoder)** | High-Fidelity Anomaly-Map Preservation | {best_quality['runtime']} ({best_quality['provider']}) | {str(best_quality['precision']).upper()} | Preserves continuous pixel-level dynamic range (AUROC={best_quality['quality_value']:.4f}, $\\Delta={best_quality['quality_delta']:+.4f}$, {best_quality['p50_model_ms']:.2f} ms $p_{{50}}$) via FP32 by eliminating quantization clipping. |"
         else:
-            rec_c = "| **Scenario C: High-Fidelity Anomaly Inspection (Autoencoder)** | Zero Defect Tolerance (Reconstruction Fidelity) | PyTorch (PyTorch_CUDA:0) | FP32 | Preserves continuous pixel-level dynamic range (AUROC=1.0000, $\\Delta=+0.0000$) by eliminating integer quantization clipping. |"
+            rec_c = "| **Scenario C: High-Fidelity Anomaly Inspection (Autoencoder)** | High-Fidelity Anomaly-Map Preservation | PyTorch (PyTorch_CUDA:0) | FP32 | Preserves continuous pixel-level dynamic range (AUROC=1.0000, $\\Delta=+0.0000$) by eliminating integer quantization clipping. |"
         lines.append(rec_c)
 
         # Scenario D: High-Throughput Offline Batch
         best_fps = df.sort_values(by="model_throughput_fps", ascending=False).iloc[0]
-        rec_d = f"| **Scenario D: High-Throughput Offline Batch** | Maximum Throughput (FPS Saturation) | {best_fps['runtime']} ({best_fps['provider']}) | {str(best_fps['precision']).upper()} | Delivers peak compute saturation ({best_fps['model_throughput_fps']:.1f} FPS) with minimum memory footprint ({best_fps['peak_vram_mb']:.1f} MB VRAM). |"
+        rec_d = f"| **Scenario D: High-Throughput Offline Batch** | Highest Measured Throughput under Benchmark Conditions | {best_fps['runtime']} ({best_fps['provider']}) | {str(best_fps['precision']).upper()} | Delivers highest measured throughput ({best_fps['model_throughput_fps']:.1f} FPS) with minimum memory footprint ({best_fps['peak_vram_mb']:.1f} MB VRAM). |"
         lines.append(rec_d)
 
     lines.extend([
