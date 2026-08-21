@@ -1,0 +1,48 @@
+# Python & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+
+# Large Model Weights, Engines, and Data (preserve .gitkeep)
+models/weights/*
+!models/weights/.gitkeep
+models/exported/*
+!models/exported/.gitkeep
+models/engines/*
+!models/engines/.gitkeep
+!models/engines/manifests/
+models/engines/manifests/*
+!models/engines/manifests/.gitkeep
+data/calibration/*
+!data/calibration/.gitkeep
+!data/calibration/README.md
+data/sample_images/*
+!data/sample_images/.gitkeep
+
+# Raw Benchmark Results & Profiles (preserve .gitkeep)
+results/raw/*
+!results/raw/.gitkeep
+results/manifests/*
+!results/manifests/.gitkeep
+results/tables/*
+!results/tables/.gitkeep
+results/figures/*
+!results/figures/.gitkeep
+results/profiles/*
+!results/profiles/.gitkeep
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo

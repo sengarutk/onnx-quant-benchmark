@@ -1,0 +1,33 @@
+model:
+  name: "yolo_nano"
+  task: "detection"
+  input_shape: [1, 3, 640, 640]
+  weights_path: "models/weights/yolov8n.pt"
+  opset: 17
+  class_names: ["object"]
+  conf_threshold: 0.25
+  iou_threshold: 0.45
+
+runtime:
+  engine: "ort_cuda"
+  precision: "fp32"
+  provider: "CUDAExecutionProvider"
+  device_id: 0
+  intra_op_num_threads: 8
+  inter_op_num_threads: 1
+  io_binding: true
+  workspace_gb: 4.0
+  dynamic_shapes: false
+
+benchmark:
+  batch_size: 1
+  warmup_iterations: 50
+  timed_iterations: 300
+  stability_sessions: 3
+  cooldown_seconds: 2.0
+  collect_nvml: true
+
+quality_thresholds:
+  max_abs_error: 1.0e-4
+  mean_abs_error: 1.0e-5
+  max_map_drop: 0.001

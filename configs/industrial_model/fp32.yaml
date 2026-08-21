@@ -1,0 +1,34 @@
+model:
+  name: "industrial_autoencoder"
+  task: "reconstruction"
+  input_shape: [1, 3, 256, 256]
+  weights_path: "models/weights/industrial_autoencoder.pt"
+  opset: 17
+  class_names: []
+  conf_threshold: 0.5
+  iou_threshold: 0.5
+
+runtime:
+  engine: "ort_cuda"
+  precision: "fp32"
+  provider: "CUDAExecutionProvider"
+  device_id: 0
+  intra_op_num_threads: 8
+  inter_op_num_threads: 1
+  io_binding: true
+  workspace_gb: 4.0
+  dynamic_shapes: false
+
+benchmark:
+  batch_size: 1
+  warmup_iterations: 50
+  timed_iterations: 300
+  stability_sessions: 3
+  cooldown_seconds: 2.0
+  collect_nvml: true
+
+quality_thresholds:
+  max_abs_error: 1.0e-4
+  mean_abs_error: 1.0e-5
+  max_auroc_drop: 0.001
+  max_aupro_drop: 0.002

@@ -1,0 +1,20 @@
+benchmark:
+  batch_size: 1
+  warmup_iterations: 50
+  timed_iterations: 300
+  stability_sessions: 3
+  cooldown_seconds: 2.0
+  device_id: 0
+  collect_nvml: true
+
+paths:
+  weights_dir: "models/weights"
+  exported_dir: "models/exported"
+  engines_dir: "models/engines"
+  results_raw: "results/raw"
+  results_manifests: "results/manifests"
+  results_tables: "results/tables"
+  results_figures: "results/figures"
+  results_profiles: "results/profiles"
+  calibration_data: "data/calibration"
+  sample_data: "data/sample_images"
