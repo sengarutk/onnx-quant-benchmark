@@ -10,6 +10,15 @@
 
 ---
 
+> [!IMPORTANT]
+> ### Scope & Experimental Boundaries (v1.0 Release)
+> - **Primary Benchmark Focus**: Empirical performance evaluation of PyTorch and ONNX Runtime (CPU & CUDA) across FP32 and Static INT8 Post-Training Quantization (PTQ) under Batch Size = 1.
+> - **Hardware & Host Disclosure**: Evaluated on an NVIDIA GeForce RTX 4050 Laptop GPU (6GB VRAM, CUDA 12.1) and Intel Core i7 processor (8 physical cores) running under Ubuntu 22.04 LTS on Windows Subsystem for Linux 2 (WSL2).
+> - **TensorRT Status Disclosure**: Full TensorRT engine building and runtime adapter modules (`src/quantization/build_trt_engine.py` and `src/runtimes/tensorrt_runtime.py`) are implemented, packaged, and verified via unit tests with mock fallbacks. However, live TensorRT runtime execution records are excluded from v1.0 benchmark tables due to host WSL2 execution provider constraints.
+> - **Evaluation Dataset Scope**: Synthetic evaluation datasets ($640\times 640$ detection scenes with geometric objects and $256\times 256$ industrial textures with pixel masks) are utilized for deterministic reproducibility and precision drift audits.
+
+---
+
 ## 1. Executive Summary & Key Findings
 
 This repository provides an empirical, statistically grounded benchmark evaluating deep learning model execution for edge inference tasks. Benchmarking across PyTorch and ONNX Runtime (CPU and CUDA) across FP32 and static INT8 PTQ yields the following key engineering takeaways:
@@ -33,25 +42,37 @@ All benchmark measurements in this suite were executed under a strictly controll
 
 ---
 
-## 3. Scope & Limitations
+## 3. Workload Scope & Graph Classification
 
-1. **TensorRT Runtime Status in v1.0**:
-   - TensorRT engine building and runtime wrapper modules (`src/quantization/build_trt_engine.py` and `src/runtimes/tensorrt_runtime.py`) are fully implemented and verified via unit tests with mock fallbacks.
-   - However, live TensorRT runtime benchmark records are excluded from the v1.0 report tables because the host WSL2 environment did not provide a validated execution path for the TensorRT execution provider.
-2. **Synthetic Dataset Scope**:
-   - The evaluation dataset utilizes synthetic detection scenes ($640\times 640$) with geometric objects and synthetic surface defect patterns ($256\times 256$) with ground-truth masks.
-   - While ideal for deterministic reproducibility and numerical drift audits, absolute quality retention metrics should be validated against domain-specific production datasets (e.g., COCO or MVTec AD) prior to deployment.
-3. **Static Resolution & Batching**:
-   - Benchmarks are executed strictly with **Batch Size = 1** under fixed static resolutions ($640\times 640$ for YOLO Nano and $256\times 256$ for the Autoencoder). Dynamic batching and dynamic axes are not evaluated in v1.0.
-
----
-
-## 4. Benchmarked Model Architectures
+The benchmark intentionally evaluates two distinct computational and topological archetypes commonly deployed in automated edge inspection systems:
 
 | Model Identifier | Task Domain | Input Resolution | Parameter Count | Baseline FP32 Size | Target Metric |
 | :--- | :--- | :---: | :---: | :---: | :--- |
 | **`yolo_nano`** | Real-Time Defect Detection | $1 \times 3 \times 640 \times 640$ | $\sim 400\text{K}$ | $1.65\text{ MB}$ | mAP@50, mAP@50-95 |
 | **`industrial_autoencoder`** | Surface Anomaly Localization | $1 \times 3 \times 256 \times 256$ | $\sim 1.4\text{M}$ | $5.41\text{ MB}$ | Image AUROC, Pixel AUROC |
+
+### Archetype Details & Selection Rationale:
+1. **YOLO Nano Detector (`yolo_nano`)**:
+   - **Graph Characteristics**: Multi-branch residual backbone, depthwise separable convolutions, anchorless detection head outputting dense tensor grids ($1 \times 84 \times 8400$).
+   - **Pipeline Complexity**: Evaluates host preprocessing (letterbox aspect-ratio preservation), model compute, and vectorized host-side Non-Maximum Suppression (NMS) decoding.
+   - **Quantization Behavior**: Quantized via static QDQ Post-Training Quantization with symmetric MinMax calibration to assess bounding-box coordinate drift and class confidence preservation.
+
+2. **Convolutional Autoencoder (`industrial_autoencoder`)**:
+   - **Graph Characteristics**: Symmetric encoder-decoder architecture with strided 2D convolutions ($256 \to 16$) and transposed 2D convolutions ($16 \to 256$), producing continuous pixel reconstructions ($1 \times 3 \times 256 \times 256$) and residual anomaly heatmaps ($1 \times 1 \times 256 \times 256$).
+   - **Pipeline Complexity**: Evaluates dense continuous tensor arithmetic, element-wise residual map computation, and $O(N)$ top-k anomaly score pooling via `np.partition`/`torch.topk`.
+   - **Quantization Behavior**: Evaluates continuous dynamic-range fidelity under integer quantization to analyze subtle pixel-level boundary clipping.
+
+---
+
+## 4. Backend Support & Validation Matrix
+
+| Runtime Engine | Execution Provider / Backend | Supported Precisions | Testbed Status in v1.0 | Implementation Module |
+| :--- | :--- | :---: | :---: | :--- |
+| **PyTorch** | `PyTorch_CPU` | FP32 | ✅ Fully Benchmarked | `src/runtimes/pytorch_runtime.py` |
+| **PyTorch** | `PyTorch_CUDA:0` | FP32, FP16 | ✅ Fully Benchmarked | `src/runtimes/pytorch_runtime.py` |
+| **ONNX Runtime** | `CPUExecutionProvider` | FP32, INT8 (QDQ) | ✅ Fully Benchmarked | `src/runtimes/ort_cpu_runtime.py` |
+| **ONNX Runtime** | `CUDAExecutionProvider` | FP32, FP16 | ✅ Fully Benchmarked | `src/runtimes/ort_cuda_runtime.py` |
+| **TensorRT** | `TensorRT Execution Provider` / Standalone Engine | FP32, FP16, INT8 | ⚠️ Architecture Ready (Mock Tested) | `src/runtimes/tensorrt_runtime.py` |
 
 ---
 
