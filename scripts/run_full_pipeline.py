@@ -1,6 +1,6 @@
 """
-Master End-to-End Benchmark Pipeline Orchestrator.
-Executes the complete 9-stage benchmark lifecycle with unified error handling,
+Master End-to-End Benchmark Pipeline Orchestrator (v1.1).
+Executes the complete 11-stage benchmark lifecycle with unified error handling,
 execution timers, and ANSI progress logging.
 """
 
@@ -47,9 +47,9 @@ def run_stage(step_num: int, total_steps: int, title: str, cmd: list, dry_run: b
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Master End-to-End Benchmark Pipeline Orchestrator")
+    parser = argparse.ArgumentParser(description="Master End-to-End Benchmark Pipeline Orchestrator (v1.1)")
     parser.add_argument("--dry-run", action="store_true", help="Print pipeline stages without executing subprocesses")
-    parser.add_argument("--skip-smoke-test", action="store_true", help="Skip Step 9 (smoke test)")
+    parser.add_argument("--skip-smoke-test", action="store_true", help="Skip final smoke test")
     args = parser.parse_args()
 
     # Determine Python binary
@@ -64,6 +64,8 @@ def main() -> None:
         ("FP16 Conversion, Static INT8 PTQ & Quality Gating", [py_bin, "scripts/quantize_and_validate.py"]),
         ("Multi-Backend Runtime Execution & MAD Stability Benchmarking", [py_bin, "scripts/benchmark_all.py"]),
         ("Result Aggregation, Pareto Analysis, Tables & Plots", [py_bin, "scripts/generate_report.py"]),
+        ("Q-Aware NMS Calibration & Decision Flip Audit", [py_bin, "src/experiments/run_q_aware_ablation.py"]),
+        ("Scalability Sweeps Across Batch Sizes & Resolutions", [py_bin, "src/experiments/run_scalability_sweep.py"]),
     ]
 
     if not args.skip_smoke_test:

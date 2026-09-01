@@ -2,7 +2,7 @@
 set -e
 
 echo "============================================================"
-echo "ONNX Edge Inference Benchmark — End-to-End Smoke Test Pipeline"
+echo "ONNX Edge Inference Benchmark — End-to-End Smoke Test Pipeline (v1.1)"
 echo "============================================================"
 
 # Auto-detect Python binary
@@ -17,19 +17,23 @@ else
     PYTEST="pytest"
 fi
 
-echo "[1/4] Running Environment Verification..."
-$PY -c "import torch, onnx, onnxruntime; print('Environment dependencies OK')"
+echo "[1/5] Running Environment Verification..."
+$PY -c "import torch, onnx, onnxruntime, scipy, sklearn; print('Environment dependencies OK')"
 
-echo "[2/4] Executing Master Report Generator..."
+echo "[2/5] Executing Master Report Generator & V1.1 Experiments..."
 $PY scripts/generate_report.py
+$PY src/experiments/run_q_aware_ablation.py
+$PY src/experiments/run_scalability_sweep.py
 
-echo "[3/4] Verifying Generated Artifacts & Data Integrity..."
+echo "[3/5] Verifying Generated Artifacts & Data Integrity..."
 test -f results/runs.csv
 test -f results/tables/table1_numerical_correctness.md
 test -f results/tables/table2_latency_throughput.md
 test -f results/tables/table3_memory_footprint.md
 test -f results/tables/table4_quality_retention.md
 test -f results/tables/table5_int8_quantization_audit.md
+test -f results/tables/table6_q_aware_nms_ablation.md
+test -f results/tables/table7_decision_flip_audit.md
 test -f results/tables/deployment_decision_matrix.md
 
 test -f results/figures/pareto_quality_vs_latency.png
@@ -38,6 +42,10 @@ test -f results/figures/speedup_comparison.png
 test -f results/figures/tail_latency_p50_p95.png
 test -f results/figures/memory_vs_footprint.png
 test -f results/figures/stability_variance_trends.png
+test -f results/figures/q_aware_pareto_recovery.png
+test -f results/figures/decision_flip_attribution.png
+test -f results/figures/scalability_batch_resolution.png
+test -f results/scalability_sweep.csv
 
 # 1. Assert runs.csv has at least 8 data rows (header + 8 rows = 9 lines minimum)
 CSV_TOTAL_LINES=$(wc -l < results/runs.csv)
@@ -66,8 +74,8 @@ for fig in results/figures/*.png; do
 done
 echo "  [CHECK] Publication figures size verification (all >= 20KB) -> PASS"
 
-echo "[4/4] Executing Test Suite..."
-$PYTEST tests/ -v
+echo "[4/5] Executing Test Suite..."
+$PYTEST tests/ -v --cov=src --cov-report=term-missing
 
 echo "============================================================"
 echo ">>> SMOKE TEST PASSED WITH 100% SUCCESS <<<"

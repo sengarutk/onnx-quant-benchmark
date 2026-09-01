@@ -192,6 +192,8 @@ class YOLOAdapter:
         orig_shape: Tuple[int, int],
         ratio: Tuple[float, float],
         pad: Tuple[float, float],
+        conf_threshold: Optional[float] = None,
+        iou_threshold: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
         """
         Decodes raw bounding box predictions, filters by confidence, unpads to original space, and applies vectorized NMS.
@@ -216,7 +218,9 @@ class YOLOAdapter:
             raw_logits = raw_np[4:, :]  # [80, 8400]
             max_logits = np.max(raw_logits, axis=0)
             class_ids = np.argmax(raw_logits, axis=0)
-            logit_thresh = float(np.log(self.conf_threshold / (1.0 - self.conf_threshold + 1e-9)))
+            active_conf = conf_threshold if conf_threshold is not None else self.conf_threshold
+            active_iou = iou_threshold if iou_threshold is not None else self.iou_threshold
+            logit_thresh = float(np.log(active_conf / (1.0 - active_conf + 1e-9)))
 
             mask = max_logits >= logit_thresh
             if not np.any(mask):
@@ -230,7 +234,9 @@ class YOLOAdapter:
             logits_np = np.ascontiguousarray(raw_np[:, 4:])
             max_logits = np.max(logits_np, axis=-1)
             class_ids = np.argmax(logits_np, axis=-1)
-            logit_thresh = float(np.log(self.conf_threshold / (1.0 - self.conf_threshold + 1e-9)))
+            active_conf = conf_threshold if conf_threshold is not None else self.conf_threshold
+            active_iou = iou_threshold if iou_threshold is not None else self.iou_threshold
+            logit_thresh = float(np.log(active_conf / (1.0 - active_conf + 1e-9)))
 
             mask = max_logits >= logit_thresh
             if not np.any(mask):
@@ -295,7 +301,8 @@ class YOLOAdapter:
             keep.append(i)
             if len(keep) >= max_nms:
                 break
-            suppressed |= (iou_mat[i] > self.iou_threshold)
+            active_iou = iou_threshold if iou_threshold is not None else self.iou_threshold
+            suppressed |= (iou_mat[i] > active_iou)
 
         if not keep:
             return []
