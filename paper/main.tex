@@ -1,0 +1,148 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{hyperref}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=cyan,
+    citecolor=blue
+}
+
+\begin{document}
+
+\title{Q-Aware Post-Processing and Rigorous Latency Profiling for Quantized Edge Vision Inference}
+
+\author{
+\IEEEauthorblockN{Utkarsh Sengar}
+\IEEEauthorblockA{\textit{Department of Computer Science and Engineering} \\
+\textit{Indian Institute of Technology Dharwad} \\
+Dharwad, Karnataka, India \\
+cs23bt026@iitdh.ac.in}
+}
+
+\maketitle
+
+\begin{abstract}
+Deploying deep neural networks to resource-constrained edge devices requires aggressive quantization and runtime graph optimization. However, static 8-bit post-training quantization (INT8 PTQ) introduces logit and coordinate regression drift that degrades task-level quality when processed with static Non-Maximum Suppression (NMS) thresholds. We introduce Quantization-Aware NMS (Q-Aware NMS), a calibration-based post-processing adaptation that dynamically tunes suppression thresholds $(\tau_{\text{conf}}, \tau_{\text{iou}})$ per precision and execution provider under latency budgets. We evaluate Q-Aware NMS alongside an 11-stage edge inference benchmarking pipeline spanning PyTorch and ONNX Runtime backends on an NVIDIA RTX 4050 testbed. Our framework introduces Quantization Decision-Change Attribution to partition detection flip rates $\Phi$ into lost true positives versus spurious false positives, computes non-parametric 95\% bootstrap confidence intervals ($B=2{,}000$), and profiles multi-dimensional scalability across batch sizes (1--8) and spatial resolutions (320--640). Q-Aware NMS recovers task-level $F_1$ degradation from INT8 quantization by $+4.2\%$ with negligible post-processing overhead ($<0.12$ ms), providing an empirical methodology for quality-retaining edge vision deployment.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Edge Inference, Model Optimization, Static INT8 PTQ, ONNX Runtime, Quantization-Aware NMS, Decision-Change Attribution.
+\end{IEEEkeywords}
+
+\section{Introduction}
+Real-time vision inference on edge platforms demands strict compliance with tail-latency bounds, thermal constraints, and limited host memory~\cite{jacob2018quantization}. While post-training quantization (PTQ) reduces memory bandwidth and accelerates compute units, integer discretization introduces tensor-level drift that shifts output probability distributions~\cite{nagel2021white}. In anchorless object detection workloads~\cite{redmon2018yolov3}, standard practice applies uniform Non-Maximum Suppression (NMS) thresholds~\cite{neubeck2006efficient} calibrated on unquantized floating-point outputs, inducing elevated false-positive clustering or missed detections.
+
+In this work, we propose \textbf{Quantization-Aware NMS (Q-Aware NMS)}, an empirical threshold calibration policy computed over disjoint calibration splits. We pair this with an 11-stage open-source benchmark suite evaluating numerical parity, memory footprint, tail latency distributions, and decision flip attribution across PyTorch~\cite{paszke2019pytorch} and ONNX Runtime~\cite{onnxruntime2026} backends.
+
+\section{System Architecture and Experimental Setup}
+All experiments are conducted on an edge-workstation testbed consisting of an Intel Core i7 processor (8 physical cores), 11.54 GB RAM, and an NVIDIA GeForce RTX 4050 Laptop GPU (6 GB VRAM, CUDA 12.1) under Ubuntu 22.04 on WSL2. Inference is evaluated under single-stream static shapes ($\text{Batch Size} = 1$).
+
+\subsection{Workload Taxonomy}
+We evaluate two complementary vision workloads:
+\begin{enumerate}
+    \item \textbf{YOLO Nano Detector}: An anchorless detection head outputting $[1, 84, 8400]$ tensors evaluated at $640 \times 640$ resolution.
+    \item \textbf{Industrial ConvAutoencoder}: A 4-stage convolutional encoder-decoder ($256 \times 256$) evaluated via top-1\% linear residual scoring~\cite{bergmann2019mvtec}.
+\end{enumerate}
+
+\section{Quantization-Aware Post-Processing (Q-Aware NMS)}
+Static INT8 QDQ quantization distorts raw anchor logits $z_{\text{INT8}}$. For precision $p \in \{\text{FP32}, \text{FP16}, \text{INT8}\}$ and runtime provider $r$, Q-Aware NMS calibrates:
+\begin{equation}
+(\tau_{\text{conf}}^*, \tau_{\text{iou}}^*) = \arg\max_{(\tau_c, \tau_i) \in \mathcal{G}} F_1(\tau_c, \tau_i \mid \mathcal{D}_{\text{cal}}, p, r)
+\end{equation}
+subject to $\text{Latency}_{p, r}(\tau_c, \tau_i) \le L_{\text{budget}}$, searching a 2D grid $\mathcal{G} = [0.10, 0.60] \times [0.30, 0.70]$. Raw model forward passes are cached, ensuring sub-second calibration.
+
+\section{Decision-Change Attribution}
+To analyze discrete behavioral shifts caused by quantization, we formulate the Detection Flip Rate $\Phi$:
+\begin{equation}
+\Phi(p_1, p_2) = \frac{|\mathcal{B}_{p_1} \triangle \mathcal{B}_{p_2}|}{|\mathcal{B}_{\text{matched}}| + |\mathcal{B}_{p_1} \triangle \mathcal{B}_{p_2}|}
+\end{equation}
+where bounding boxes are matched via $\text{IoU} \ge 0.50$, and flips are partitioned into lost/recovered True Positives ($\text{Flip}_{\text{TP}}$) and spurious/suppressed False Positives ($\text{Flip}_{\text{FP}}$).
+
+\section{Statistical Methodology}
+All empirical latency metrics ($p_{50}, p_{95}, p_{99}$) and task-quality scores are reported with non-parametric 95\% bootstrap confidence intervals~\cite{efron1994introduction} ($B=2{,}000$ resamples). Pairwise latency differentials are evaluated via the Wilcoxon signed-rank test~\cite{wilcoxon1945individual} with Holm-Bonferroni correction~\cite{holm1979simple}, and multi-session runs are filtered for thermal jitter using Median Absolute Deviation (MAD)~\cite{leys2013detecting}.
+
+\section{Empirical Results and Analysis}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/q_aware_pareto_recovery.png}
+\caption{Pareto frontier showing task $F_1$-score recovery under Q-Aware NMS across floating-point and quantized runtimes.}
+\label{fig:q_aware_pareto}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/decision_flip_attribution.png}
+\caption{Attribution of detection decision changes ($\Phi$) partitioned into True Positive and False Positive flips.}
+\label{fig:decision_flips}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/latency_breakdown_stacked.png}
+\caption{Latency breakdown across Pre-Processing, Model Compute, and Post-Processing stages (Batch Size = 1).}
+\label{fig:latency_breakdown}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/scalability_batch_resolution.png}
+\caption{Scalability grid profiling latency scaling across Batch Sizes $\{1, 2, 4, 8\}$ and Resolutions $\{320, 416, 512, 640\}$.}
+\label{fig:scalability}
+\end{figure}
+
+\subsection{Latency and Numerical Parity}
+Table~\ref{tab:latency} presents compute-only and end-to-end latency distributions ($p_{50}, p_{95}$) alongside memory footprints and throughput metrics.
+
+\begin{table*}[t]
+\caption{Multi-Session Latency, Parity, and Memory Footprint Audit (Batch Size = 1)}
+\label{tab:latency}
+\centering
+\begin{tabular}{lllcccccc}
+\toprule
+\textbf{Workload} & \textbf{Engine} & \textbf{Precision} & \textbf{$L_\infty$ Parity} & \textbf{Model $p_{50}$ (ms)} & \textbf{Model $p_{95}$ (ms)} & \textbf{E2E $p_{50}$ (ms)} & \textbf{FPS} & \textbf{VRAM (MB)} \\
+\midrule
+YOLO Nano & PyTorch CUDA & FP32 & $0.00 \times 10^0$ & 0.83 & 0.87 & 6.88 & 1201.2 & 28.5 \\
+YOLO Nano & ORT CPU & FP32 & $2.33 \times 10^{-4}$ & 3.59 & 4.34 & 7.67 & 278.2 & -- \\
+YOLO Nano & ORT CPU & INT8 (QDQ) & $3.41 \times 10^{-1}$ & 4.54 & 6.53 & 9.35 & 220.2 & -- \\
+Autoencoder & PyTorch CUDA & FP32 & $0.00 \times 10^0$ & 1.22 & 1.78 & 3.59 & 821.8 & 31.2 \\
+Autoencoder & ORT CPU & FP32 & $1.01 \times 10^{-5}$ & 6.22 & 6.81 & 8.78 & 160.9 & -- \\
+Autoencoder & ORT CPU & INT8 (QDQ) & $5.01 \times 10^{-3}$ & 6.36 & 8.19 & 9.89 & 157.3 & -- \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\begin{table}[t]
+\caption{Q-Aware NMS Calibration and Metric Recovery}
+\label{tab:q_aware}
+\centering
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Configuration} & \textbf{Default $F_1$} & \textbf{Calibrated $F_1$} & \textbf{$\Delta F_1$} & \textbf{Optimal $(\tau_c, \tau_i)$} \\
+\midrule
+YOLO FP32 (ORT CPU) & 0.912 & 0.924 & +0.012 & (0.20, 0.45) \\
+YOLO FP16 (ORT CUDA) & 0.910 & 0.921 & +0.011 & (0.20, 0.50) \\
+YOLO INT8 (ORT CPU) & 0.884 & 0.926 & \textbf{+0.042} & (0.15, 0.55) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Conclusion}
+This paper demonstrates that quantization noise in edge vision models can be mitigated through calibration-aware post-processing without retraining. By pairing Q-Aware NMS with decision-change attribution and statistical confidence bounds, practitioners can recover task quality while adhering to strict edge latency and memory limits.
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
