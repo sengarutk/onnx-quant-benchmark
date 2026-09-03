@@ -12,16 +12,23 @@ from src.experiments.run_scalability_sweep import run_scalability_sweeps
 class TestScalabilitySweep:
     """Test suite asserting scalability sweep execution and dimension handling."""
 
-    def test_scalability_sweep_minimal_run(self) -> None:
+    def test_scalability_sweep_minimal_run(self, tmp_path: Path) -> None:
         """Executes minimal scalability sweep across 2 resolutions and 2 batch sizes."""
+        test_csv = tmp_path / "test_scalability.csv"
+        test_fig_dir = tmp_path / "figures"
         df = run_scalability_sweeps(
             resolutions=[320, 416],
             batch_sizes=[1, 2],
             warmup_iters=2,
             timed_iters=3,
+            out_csv=test_csv,
+            fig_dir=test_fig_dir,
+            save_artifacts=True,
         )
 
         assert len(df) == 4
+        assert test_csv.is_file()
+        assert (test_fig_dir / "scalability_batch_resolution.png").is_file()
         assert "throughput_fps" in df.columns
         assert "p50_ms" in df.columns
         assert all(df["p50_ms"] > 0.0)

@@ -32,6 +32,9 @@ def run_scalability_sweeps(
     batch_sizes: list = [1, 2, 4, 8],
     warmup_iters: int = 15,
     timed_iters: int = 40,
+    out_csv: Path = None,
+    fig_dir: Path = None,
+    save_artifacts: bool = True,
 ) -> pd.DataFrame:
     """
     Executes 2D scalability grid sweep over resolutions and batch dimensions.
@@ -77,45 +80,46 @@ def run_scalability_sweeps(
             })
 
     df = pd.DataFrame(records)
-    out_csv = PROJECT_ROOT / "results" / "scalability_sweep.csv"
-    out_csv.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(out_csv, index=False)
-    logger.info(f"Saved scalability sweep CSV -> {out_csv}")
+    if save_artifacts:
+        csv_dest = Path(out_csv) if out_csv else PROJECT_ROOT / "results" / "scalability_sweep.csv"
+        csv_dest.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(csv_dest, index=False)
+        logger.info(f"Saved scalability sweep CSV -> {csv_dest}")
 
-    # Render Publication Figure: Scalability Batch & Resolution Sweep
-    fig_dir = PROJECT_ROOT / "results" / "figures"
-    fig_dir.mkdir(parents=True, exist_ok=True)
+        # Render Publication Figure: Scalability Batch & Resolution Sweep
+        target_fig_dir = Path(fig_dir) if fig_dir else PROJECT_ROOT / "results" / "figures"
+        target_fig_dir.mkdir(parents=True, exist_ok=True)
 
-    plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.0, 5.0), dpi=300)
+        plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.0, 5.0), dpi=300)
 
-    # Subplot 1: Latency (p50) vs Resolution per Batch Size
-    for bs in batch_sizes:
-        sub_df = df[df["batch_size"] == bs]
-        ax1.plot(sub_df["resolution"], sub_df["p50_ms"], marker="o", lw=2.0, label=f"Batch Size = {bs}")
+        # Subplot 1: Latency (p50) vs Resolution per Batch Size
+        for bs in batch_sizes:
+            sub_df = df[df["batch_size"] == bs]
+            ax1.plot(sub_df["resolution"], sub_df["p50_ms"], marker="o", lw=2.0, label=f"Batch Size = {bs}")
 
-    ax1.set_title(r"Inference Latency ($p_{50}$) Scaling vs. Resolution", fontsize=11, fontweight="bold")
-    ax1.set_xlabel("Input Resolution (Square Pixels)", fontsize=10, fontweight="bold")
-    ax1.set_ylabel(r"Model Latency $p_{50}$ (ms)", fontsize=10, fontweight="bold")
-    ax1.set_xticks(resolutions)
-    ax1.legend(frameon=True, fontsize=9)
+        ax1.set_title(r"Inference Latency ($p_{50}$) Scaling vs. Resolution", fontsize=11, fontweight="bold")
+        ax1.set_xlabel("Input Resolution (Square Pixels)", fontsize=10, fontweight="bold")
+        ax1.set_ylabel(r"Model Latency $p_{50}$ (ms)", fontsize=10, fontweight="bold")
+        ax1.set_xticks(resolutions)
+        ax1.legend(frameon=True, fontsize=9)
 
-    # Subplot 2: Throughput (FPS) vs Batch Size per Resolution
-    for res in resolutions:
-        sub_df = df[df["resolution"] == res]
-        ax2.plot(sub_df["batch_size"], sub_df["throughput_fps"], marker="s", lw=2.0, label=f"Res {res}x{res}")
+        # Subplot 2: Throughput (FPS) vs Batch Size per Resolution
+        for res in resolutions:
+            sub_df = df[df["resolution"] == res]
+            ax2.plot(sub_df["batch_size"], sub_df["throughput_fps"], marker="s", lw=2.0, label=f"Res {res}x{res}")
 
-    ax2.set_title("System Throughput (FPS) vs. Batch Dimension", fontsize=11, fontweight="bold")
-    ax2.set_xlabel("Inference Batch Size", fontsize=10, fontweight="bold")
-    ax2.set_ylabel("Throughput (Frames Per Second)", fontsize=10, fontweight="bold")
-    ax2.set_xticks(batch_sizes)
-    ax2.legend(frameon=True, fontsize=9)
+        ax2.set_title("System Throughput (FPS) vs. Batch Dimension", fontsize=11, fontweight="bold")
+        ax2.set_xlabel("Inference Batch Size", fontsize=10, fontweight="bold")
+        ax2.set_ylabel("Throughput (Frames Per Second)", fontsize=10, fontweight="bold")
+        ax2.set_xticks(batch_sizes)
+        ax2.legend(frameon=True, fontsize=9)
 
-    plt.tight_layout()
-    fig_path = fig_dir / "scalability_batch_resolution.png"
-    plt.savefig(fig_path, dpi=300)
-    plt.close()
-    logger.info(f"Generated Scalability Figure -> {fig_path}")
+        plt.tight_layout()
+        fig_path = target_fig_dir / "scalability_batch_resolution.png"
+        plt.savefig(fig_path, dpi=300)
+        plt.close()
+        logger.info(f"Generated Scalability Figure -> {fig_path}")
 
     return df
 

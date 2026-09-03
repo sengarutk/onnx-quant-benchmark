@@ -44,7 +44,13 @@ if [ ! -f "models/exported/yolo_nano_static_int8.onnx" ]; then
 fi
 $PY scripts/generate_report.py
 $PY src/experiments/run_q_aware_ablation.py
-$PY src/experiments/run_scalability_sweep.py
+# Execute scalability sweep only if artifacts are missing
+if [ ! -f "results/scalability_sweep.csv" ] || [ ! -f "results/figures/scalability_batch_resolution.png" ] || [ "${FORCE_SWEEP:-0}" = "1" ]; then
+    echo "  [BENCHMARK] Executing scalability sweeps across batch sizes & resolutions..."
+    $PY src/experiments/run_scalability_sweep.py
+else
+    echo "  [CACHE] Scalability sweep artifacts present, skipping live re-benchmarking."
+fi
 
 echo "[3/5] Verifying Generated Artifacts & Data Integrity..."
 test -f results/runs.csv
@@ -67,6 +73,14 @@ test -f results/figures/q_aware_pareto_recovery.png
 test -f results/figures/decision_flip_attribution.png
 test -f results/figures/scalability_batch_resolution.png
 test -f results/scalability_sweep.csv
+
+# Assert scalability_sweep.csv has 16 data rows (1 header + 16 rows = 17 lines)
+SWEEP_LINES=$(wc -l < results/scalability_sweep.csv 2>/dev/null || echo "0")
+if [ "$SWEEP_LINES" -lt 17 ]; then
+    echo "ERROR: results/scalability_sweep.csv has fewer than 16 sweep rows (found $((SWEEP_LINES - 1)))!"
+    exit 1
+fi
+echo "  [CHECK] results/scalability_sweep.csv grid integrity (16 configurations) -> PASS"
 
 # 1. Assert runs.csv has at least 8 data rows (header + 8 rows = 9 lines minimum)
 CSV_TOTAL_LINES=$(wc -l < results/runs.csv)
