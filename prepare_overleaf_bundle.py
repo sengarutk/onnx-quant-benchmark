@@ -41,10 +41,9 @@ print("=" * 75)
 for fig_name in figure_names:
     src_fig = SRC_FIGURES_DIR / fig_name
     dst_fig = FIGURES_DIR / fig_name
-    if not dst_fig.is_file():
-        if not src_fig.is_file():
-            raise FileNotFoundError(f"Source figure missing: {src_fig}")
-        shutil.copy2(src_fig, dst_fig)
+    if not src_fig.is_file():
+        raise FileNotFoundError(f"Source figure missing: {src_fig}")
+    shutil.copy2(src_fig, dst_fig)
     sz_bytes = dst_fig.stat().st_size
     sz_kb = sz_bytes / 1024.0
     print(f"  [FIGURE] {fig_name:<36} ({sz_kb:>7.1f} KB)")

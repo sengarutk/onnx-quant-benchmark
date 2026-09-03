@@ -571,7 +571,7 @@ files["README.md"] = '''# ONNX Runtime Edge Inference and Static INT8 PTQ Benchm
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.5%2B-ee4c2c.svg)](https://pytorch.org/)
 [![ONNX Runtime](https://img.shields.io/badge/ONNX_Runtime-1.20%2B-0078d4.svg)](https://onnxruntime.ai/)
-[![Coverage](https://img.shields.io/badge/Coverage-89%25-brightgreen.svg)](tests/)
+[![Coverage](https://img.shields.io/badge/Coverage-90%25-brightgreen.svg)](tests/)
 
 ---
 
@@ -584,6 +584,29 @@ files["README.md"] = '''# ONNX Runtime Edge Inference and Static INT8 PTQ Benchm
 > - **Edge Workload Definition**: Here, 'edge' refers to latency- and resource-constrained single-stream (Batch Size = 1) inference workflows. These measurements are collected on a host workstation GPU testbed and do not constitute physical Jetson, IPC, smart-camera, or industrial PLC controller benchmarks.
 
 ---
+
+## Academic Conference Manuscript & Overleaf Bundle
+
+This benchmark suite accompanies the conference manuscript:
+> **Q-Aware Post-Processing and Rigorous Latency Profiling for Quantized Edge Vision Inference**  
+> *Utkarsh Sengar (Indian Institute of Technology Dharwad)*
+
+- **Ready-to-Compile Overleaf Archive**: [`overleaf_paper.zip`](overleaf_paper.zip) (2.65 MB self-contained archive with flat root layout, full IEEEtran LaTeX source, all 9 verified 300-DPI figures, and complete 15-entry BibTeX database).
+- **Compilation Instructions**: Go to [Overleaf](https://www.overleaf.com) $\\to$ **New Project** $\\to$ **Upload Project** $\\to$ Select `overleaf_paper.zip`. Recompiles with zero missing references or package clashes.
+- **LaTeX Source Tree**: [`paper/main.tex`](paper/main.tex), [`paper/references.bib`](paper/references.bib), and [`paper/figures/`](paper/figures/).
+
+### BibTeX Citation
+```bibtex
+@inproceedings{sengar2026qaware,
+  author    = {Utkarsh Sengar},
+  title     = {Q-Aware Post-Processing and Rigorous Latency Profiling for Quantized Edge Vision Inference},
+  booktitle = {Proceedings of the IEEE/ACM Conference on Connected and Edge Systems (EdgeSys)},
+  year      = {2026}
+}
+```
+
+---
+
 
 ## 1. Executive Summary & Key Findings
 
