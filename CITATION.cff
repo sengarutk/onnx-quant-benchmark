@@ -4,8 +4,8 @@ title: "ONNX Runtime Edge Inference and Static INT8 PTQ Benchmark Suite: A Syste
 authors:
   - family-names: "Sengar"
     given-names: "Ayush"
-version: 1.0.0
-date-released: 2026-08-20
+version: 1.1.0
+date-released: 2026-09-03
 url: "https://github.com/ayushsengar/onnx-edge-inference-benchmark"
 keywords:
   - "deep-learning"
