@@ -159,6 +159,15 @@ def aggregate_benchmark_runs(
                 logger.warning(f"Failed to parse run manifest at {run_file}: {e}")
 
     if not records:
+        if output_csv_path and Path(output_csv_path).is_file():
+            try:
+                existing_df = pd.read_csv(output_csv_path)
+                if len(existing_df) > 0:
+                    logger.info(f"Loaded {len(existing_df)} pre-computed runs from {output_csv_path}")
+                    return existing_df
+            except Exception as e:
+                logger.warning(f"Could not read existing CSV at {output_csv_path}: {e}")
+
         df = pd.DataFrame(columns=[
             "run_id", "status", "model", "task", "runtime", "provider", "precision",
             "batch_size", "input_shape", "p50_model_ms", "p90_model_ms", "p95_model_ms",

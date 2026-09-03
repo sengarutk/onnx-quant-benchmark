@@ -21,6 +21,27 @@ echo "[1/5] Running Environment Verification..."
 $PY -c "import torch, onnx, onnxruntime, scipy, sklearn; print('Environment dependencies OK')"
 
 echo "[2/5] Executing Master Report Generator & V1.1 Experiments..."
+# Ensure sample data and model weights exist for fresh clones
+if [ ! -f "data/sample_images/manifest.json" ]; then
+    echo "  [PREPARE] Generating sample evaluation data..."
+    $PY scripts/prepare_sample_data.py
+fi
+if [ ! -f "data/calibration/manifest.csv" ]; then
+    echo "  [PREPARE] Generating calibration data..."
+    $PY scripts/prepare_calibration_data.py
+fi
+if [ ! -f "models/weights/yolo_nano_baseline.pt" ]; then
+    echo "  [PREPARE] Generating model baselines..."
+    $PY scripts/run_pytorch_baselines.py
+fi
+if [ ! -f "models/exported/yolo_nano_fp32_opset17.onnx" ]; then
+    echo "  [PREPARE] Exporting ONNX models..."
+    $PY scripts/export_and_validate.py
+fi
+if [ ! -f "models/exported/yolo_nano_static_int8.onnx" ]; then
+    echo "  [PREPARE] Quantizing models to FP16 and INT8..."
+    $PY scripts/quantize_and_validate.py
+fi
 $PY scripts/generate_report.py
 $PY src/experiments/run_q_aware_ablation.py
 $PY src/experiments/run_scalability_sweep.py
