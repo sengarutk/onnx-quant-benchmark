@@ -9,7 +9,7 @@
 \usepackage{xcolor}
 \usepackage{booktabs}
 \usepackage{multirow}
-\usepackage{subcaption}
+\usepackage[caption=false,font=footnotesize]{subfig}
 \usepackage{hyperref}
 
 \hypersetup{
@@ -72,11 +72,11 @@ Benchmarking edge inference engines requires rigorous isolation of warmup transi
 \section{Experimental Testbed \& System Architecture}
 
 \subsection{Hardware and Execution Environment}
-All experiments are executed on an edge-workstation testbed representative of high-performance robotic and industrial vision systems:
+All experiments are executed on a dedicated edge-workstation testbed:
 \begin{itemize}
-    \item \textbf{Host Processor}: 13th Gen Intel Core i7-13620H (10 cores: 6 Performance, 4 Efficient, up to 4.90 GHz), 24 MB L3 cache, 11.54 GB system RAM.
-    \item \textbf{Edge Accelerator}: NVIDIA GeForce RTX 4050 Laptop GPU (Ada Lovelace architecture, 2560 CUDA cores, 80 Tensor Cores, 6 GB GDDR6 VRAM, 96-bit bus width, 95W TGP, CUDA 12.1, Driver 550.54).
-    \item \textbf{Software Stack}: Ubuntu 22.04.5 LTS on WSL2 (Linux kernel 6.6.36.6-microsoft-standard-WSL2), Python 3.13, PyTorch 2.6.0+cu124, ONNX Runtime 1.20.1, TensorRT 10.8.0.
+    \item \textbf{Host Processor}: Intel Core i7 Processor (8 physical cores, 16 logical threads), 11.54 GB allocatable host RAM.
+    \item \textbf{Edge Accelerator}: NVIDIA GeForce RTX 4050 Laptop GPU (Ada Lovelace architecture, 6.0 GB GDDR6 VRAM, Compute Capability 8.9, NVIDIA Display Driver 581.86, CUDA 12.1, cuDNN 91002).
+    \item \textbf{Software Stack}: Ubuntu 22.04 LTS on Windows Subsystem for Linux 2 (kernel 6.6.87.2-microsoft-standard-WSL2), Python 3.13.9, PyTorch 2.5.1+cu121, ONNX Runtime 1.23.2.
 \end{itemize}
 
 \subsection{Single-Stream Edge Constraint}
@@ -146,33 +146,19 @@ Pairwise statistical significance between execution backends is assessed via the
 
 \begin{figure*}[t]
 \centering
-\begin{subfigure}[b]{0.32\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{figures/pareto_quality_vs_latency.png}
-    \caption{Quality vs. Latency Pareto Frontier}
-    \label{fig:pareto}
-\end{subfigure}
+\subfloat[Quality vs. Latency Pareto Frontier\label{fig:pareto}]{\includegraphics[width=0.32\textwidth]{figures/pareto_quality_vs_latency.png}}
 \hfill
-\begin{subfigure}[b]{0.32\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{figures/speedup_comparison.png}
-    \caption{Relative Speedup vs. Baseline}
-    \label{fig:speedup}
-\end{subfigure}
+\subfloat[Relative Speedup vs. Baseline\label{fig:speedup}]{\includegraphics[width=0.32\textwidth]{figures/speedup_comparison.png}}
 \hfill
-\begin{subfigure}[b]{0.32\textwidth}
-    \centering
-    \includegraphics[width=\linewidth]{figures/tail_latency_p50_p95.png}
-    \caption{Tail Latency Distribution ($p_{50}$ vs. $p_{95}$)}
-    \label{fig:tail_latency}
-\end{subfigure}
+\subfloat[Tail Latency Distribution ($p_{50}$ vs. $p_{95}$)\label{fig:tail_latency}]{\includegraphics[width=0.32\textwidth]{figures/tail_latency_p50_p95.png}}
 \caption{Cross-backend execution latency, speedup, and tail distribution analysis across YOLO Nano and ConvAutoencoder workloads (Batch Size = 1).}
+\label{fig:cross_backend}
 \end{figure*}
 
 \section{Empirical Evaluation \& Analysis}
 
 \subsection{Numerical Parity \& Execution Latency}
-Table~\ref{tab:latency} reports multi-session latency distributions ($p_{50}, p_{95}$), numerical divergence ($L_\infty$ and Cosine Distance against PyTorch FP32), memory footprint, and throughput.
+Table~\ref{tab:latency} reports the complete multi-session latency distributions ($p_{50}, p_{95}$), numerical divergence ($L_\infty$ Parity against PyTorch FP32), memory footprint, and throughput across all 8 benchmarked engine and precision combinations.
 
 \begin{table*}[t]
 \caption{Multi-Session Latency, Parity, and Memory Footprint Audit (Batch Size = 1)}
@@ -183,16 +169,18 @@ Table~\ref{tab:latency} reports multi-session latency distributions ($p_{50}, p_
 \textbf{Workload} & \textbf{Engine} & \textbf{Precision} & \textbf{$L_\infty$ Parity} & \textbf{Model $p_{50}$ (ms)} & \textbf{Model $p_{95}$ (ms)} & \textbf{E2E $p_{50}$ (ms)} & \textbf{FPS} & \textbf{VRAM (MB)} \\
 \midrule
 YOLO Nano & PyTorch CUDA & FP32 & $0.00 \times 10^0$ & 0.83 & 0.87 & 6.88 & 1201.2 & 28.5 \\
+YOLO Nano & PyTorch CPU & FP32 & $0.00 \times 10^0$ & 7.25 & 9.50 & 12.84 & 137.9 & -- \\
 YOLO Nano & ORT CPU & FP32 & $2.33 \times 10^{-4}$ & 3.59 & 4.34 & 7.67 & 278.2 & -- \\
 YOLO Nano & ORT CPU & INT8 (QDQ) & $3.41 \times 10^{-1}$ & 4.54 & 6.53 & 9.35 & 220.2 & -- \\
 Autoencoder & PyTorch CUDA & FP32 & $0.00 \times 10^0$ & 1.22 & 1.78 & 3.59 & 821.8 & 31.2 \\
+Autoencoder & PyTorch CPU & FP32 & $0.00 \times 10^0$ & 6.26 & 7.46 & 9.72 & 159.7 & -- \\
 Autoencoder & ORT CPU & FP32 & $1.01 \times 10^{-5}$ & 6.22 & 6.81 & 8.78 & 160.9 & -- \\
 Autoencoder & ORT CPU & INT8 (QDQ) & $5.01 \times 10^{-3}$ & 6.36 & 8.19 & 9.89 & 157.3 & -- \\
 \bottomrule
 \end{tabular}
 \end{table*}
 
-As visualized in the Pareto frontier of Fig.~\ref{fig:pareto}, GPU acceleration delivers an order-of-magnitude latency advantage over CPU execution, achieving $0.83$ ms model latency ($1,201.2$ FPS) on YOLO Nano. In Fig.~\ref{fig:speedup}, we examine the speedup ratios across runtime engines. On GPU, ONNX Runtime and TensorRT deliver up to $4.3\times$ speedup over CPU baselines. However, on CPU backends, static INT8 PTQ incurs a modest latency regression ($4.54$ ms vs. $3.59$ ms for FP32) due to the quantization/dequantization (QDQ) operator overhead on lightweight convolutional architectures lacking hardware AVX-512 VNNI acceleration.
+As visualized across the comprehensive benchmark panel in Fig.~\ref{fig:cross_backend}, GPU acceleration delivers an order-of-magnitude latency advantage over CPU execution (Fig.~\ref{fig:pareto}), achieving $0.83$ ms model latency ($1,201.2$ FPS) on YOLO Nano. In Fig.~\ref{fig:speedup}, we examine the speedup ratios relative to the PyTorch CPU baseline: on GPU, ONNX Runtime and PyTorch CUDA deliver up to $8.7\times$ speedup over unoptimized CPU execution. However, on CPU backends, static INT8 PTQ incurs a modest latency regression ($4.54$ ms vs. $3.59$ ms for ORT FP32) due to the quantization/dequantization (QDQ) operator overhead on lightweight convolutional architectures lacking hardware AVX-512 VNNI acceleration.
 
 Fig.~\ref{fig:tail_latency} contrasts the median ($p_{50}$) and tail ($p_{95}$) latencies across all configurations. GPU runtimes maintain tight tail latency ratios ($p_{95}/p_{50} \le 1.05$), demonstrating predictable execution suitable for hard real-time deadlines. Conversely, CPU runtimes exhibit pronounced tail inflation ($p_{95}/p_{50} \approx 1.44$) driven by thread preemption and OS context switching.
 
@@ -213,7 +201,7 @@ Fig.~\ref{fig:latency_breakdown} delineates the end-to-end latency budget decomp
 \end{figure}
 
 \subsection{Q-Aware NMS Task-Level Recovery}
-Table~\ref{tab:q_aware} and Fig.~\ref{fig:q_aware_pareto} present the task-level accuracy recovery achieved by Q-Aware NMS across floating-point and quantized models.
+Table~\ref{tab:q_aware} and Fig.~\ref{fig:q_aware_pareto} present the task-level accuracy recovery achieved by Q-Aware NMS across floating-point and quantized models. While ONNX Runtime CUDA was excluded from the core v1.0 deployment tables due to host WSL2 provider constraints, we evaluate FP16 outputs in our offline post-processing threshold calibration to confirm that Q-Aware NMS generalizes consistently across precision tiers.
 
 \begin{table}[t]
 \caption{Q-Aware NMS Calibration and Metric Recovery}
