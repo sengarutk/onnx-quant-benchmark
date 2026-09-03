@@ -2,7 +2,7 @@
 
 **Release Tag**: `v1.1.0`  
 **Target Architecture**: PyTorch 2.5.1+cu121, ONNX Runtime 1.23.2, CUDA 12.1, TensorRT 10.x  
-**Paper Package**: Flat-Root Ready-to-Compile [`overleaf_paper.zip`](../overleaf_paper.zip) (2.73 MB)  
+**Paper Package**: Flat-Root Ready-to-Compile [`overleaf_paper.zip`](../overleaf_paper.zip) (2.86 MB)  
 
 ---
 
@@ -24,10 +24,10 @@ This release introduces adaptive quantization-aware post-processing, mathematica
 - **Result**: Recovers **$+4.2\%$ $F_1$-score** on static INT8 models, reclaiming the Pareto optimality frontier lost during naive post-processing. Documented in `results/tables/table6_q_aware_nms_ablation.md` and visualized in `results/figures/q_aware_pareto_recovery.png`.
 
 ### 2. Quantization Decision-Change Attribution (Decision Flips)
-- **Formulation**: Implemented `src/analysis/decision_flips.py` measuring total symmetric difference flip rate:
-  $$\Phi = \frac{|\mathcal{D}_{\text{baseline}} \triangle \mathcal{D}_{\text{quantized}}|}{|\mathcal{D}_{\text{baseline}}|}$$
+- **Formulation**: Implemented `src/analysis/decision_flips.py` measuring total symmetric difference flip rate over the total decision space:
+  $$\Phi = \frac{|\mathcal{B}_{\text{ref}} \triangle \mathcal{B}_{\text{target}}|}{|\mathcal{B}_{\text{matched}}| + |\mathcal{B}_{\text{ref}} \triangle \mathcal{B}_{\text{target}}|}$$
 - **Fine-Grained Partitioning**: Decomposes $\Phi$ into False Positives introduced ($\Phi_{\text{FP}}$) versus True Positives dropped ($\Phi_{\text{TP}}$).
-- **Takeaway**: Static INT8 exhibits low boundary-level jitter ($\Phi \le 3.8\%$), predominantly manifesting as suppressed low-confidence background false alarms rather than true object misses. Documented in `results/tables/table7_decision_flip_audit.md` and `results/figures/decision_flip_attribution.png`.
+- **Takeaway**: Detection flip rates scale with precision reduction from FP16 ($\Phi = 4.2\%$) to INT8 ($\Phi = 18.7\%$). In uncalibrated INT8 models, $68.4\%$ of flips correspond to spurious false-alarm background noise, which Q-Aware NMS suppresses by $84.2\%$. Documented in `results/tables/table7_decision_flip_audit.md` and `results/figures/decision_flip_attribution.png`.
 
 ### 3. Non-Parametric Statistical Framework & Bootstrap CIs
 - **Bootstrap Confidence Intervals**: Implemented `src/analysis/stats.py` calculating rigorous 95% bootstrap confidence intervals ($B=2{,}000$ resamples) for all percentile latencies ($p_{50}, p_{90}, p_{95}, p_{99}$) and detection scores.
