@@ -107,7 +107,7 @@ Sessions exhibiting a Coefficient of Variation ($CV = \sigma / \mu > 0.04$) trig
 \subsection{Quantization-Aware Post-Processing (Q-Aware NMS)}
 Static INT8 Post-Training Quantization (QDQ format) applies linear mapping to activations:
 \begin{equation}
-\hat{x} = S \cdot (q - Z), \quad q = \text{clamp}\left(\left\lfloor \frac{x}{S} \right\rceil + Z, -128, 127\right)
+\hat{x} = S \cdot (q - Z), \quad q = \text{clamp}\left(\text{round}\left(\frac{x}{S}\right) + Z, -128, 127\right)
 \end{equation}
 This quantization introduces logit drift $\Delta z = z_{\text{FP32}} - z_{\text{INT8}}$, perturbing sigmoid probabilities $\sigma(z)$ and shifting class score distributions downward.
 
@@ -164,6 +164,7 @@ Table~\ref{tab:latency} reports the complete multi-session latency distributions
 \caption{Multi-Session Latency, Parity, and Memory Footprint Audit (Batch Size = 1)}
 \label{tab:latency}
 \centering
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lllcccccc}
 \toprule
 \textbf{Workload} & \textbf{Engine} & \textbf{Precision} & \textbf{$L_\infty$ Parity} & \textbf{Model $p_{50}$ (ms)} & \textbf{Model $p_{95}$ (ms)} & \textbf{E2E $p_{50}$ (ms)} & \textbf{FPS} & \textbf{VRAM (MB)} \\
@@ -177,7 +178,8 @@ Autoencoder & PyTorch CPU & FP32 & $0.00 \times 10^0$ & 6.26 & 7.46 & 9.72 & 159
 Autoencoder & ORT CPU & FP32 & $1.01 \times 10^{-5}$ & 6.22 & 6.81 & 8.78 & 160.9 & -- \\
 Autoencoder & ORT CPU & INT8 (QDQ) & $5.01 \times 10^{-3}$ & 6.36 & 8.19 & 9.89 & 157.3 & -- \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table*}
 
 As visualized across the comprehensive benchmark panel in Fig.~\ref{fig:cross_backend}, GPU acceleration delivers an order-of-magnitude latency advantage over CPU execution (Fig.~\ref{fig:pareto}), achieving $0.83$ ms model latency ($1,201.2$ FPS) on YOLO Nano. In Fig.~\ref{fig:speedup}, we examine the speedup ratios relative to the PyTorch CPU baseline: on GPU, ONNX Runtime and PyTorch CUDA deliver up to $8.7\times$ speedup over unoptimized CPU execution. However, on CPU backends, static INT8 PTQ incurs a modest latency regression ($4.54$ ms vs. $3.59$ ms for ORT FP32) due to the quantization/dequantization (QDQ) operator overhead on lightweight convolutional architectures lacking hardware AVX-512 VNNI acceleration.

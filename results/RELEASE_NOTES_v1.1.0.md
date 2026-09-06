@@ -2,7 +2,7 @@
 
 **Release Tag**: `v1.1.0`  
 **Target Architecture**: PyTorch 2.5.1+cu121, ONNX Runtime 1.23.2, CUDA 12.1, TensorRT 10.x  
-**Paper Package**: Flat-Root Ready-to-Compile [`overleaf_paper.zip`](../overleaf_paper.zip) (2.86 MB)  
+**Paper Package**: Flat-Root Ready-to-Compile [`overleaf_paper.zip`](../overleaf_paper.zip) (1.53 MB)  
 
 ---
 
