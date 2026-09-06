@@ -26,7 +26,7 @@ This benchmark suite accompanies the conference manuscript:
 > **Q-Aware Post-Processing and Rigorous Latency Profiling for Quantized Edge Vision Inference**  
 > *Utkarsh Sengar (Indian Institute of Technology Dharwad)*
 
-- **Ready-to-Compile Overleaf Archive**: [`overleaf_paper.zip`](overleaf_paper.zip) (2.65 MB self-contained archive with flat root layout, full IEEEtran LaTeX source, all 9 verified 300-DPI figures, and complete 15-entry BibTeX database).
+- **Ready-to-Compile Overleaf Archive**: [`overleaf_paper.zip`](overleaf_paper.zip) (1.53 MB self-contained archive with flat root layout, full IEEEtran LaTeX source, all 9 verified 300-DPI figures, and complete 15-entry BibTeX database).
 - **Compilation Instructions**: Go to [Overleaf](https://www.overleaf.com) $\to$ **New Project** $\to$ **Upload Project** $\to$ Select `overleaf_paper.zip`. Recompiles with zero missing references or package clashes.
 - **LaTeX Source Tree**: [`paper/main.tex`](paper/main.tex), [`paper/references.bib`](paper/references.bib), and [`paper/figures/`](paper/figures/).
 

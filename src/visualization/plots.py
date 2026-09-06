@@ -267,11 +267,12 @@ def plot_memory_footprints(df: pd.DataFrame, output_dir: Path) -> Path:
     ax.set_ylabel("Megabytes (MB)", fontweight="bold")
     ax.set_title("Memory Allocations & Storage Footprint Across Configurations", fontweight="bold", pad=12)
     ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=8)
+    ax.set_xticklabels(labels)
+    plt.xticks(rotation=25, ha="right", fontsize=8)
     ax.legend(loc="upper right")
     ax.grid(True, linestyle=":", alpha=0.5, axis="y")
 
-    plt.tight_layout()
+    plt.subplots_adjust(bottom=0.22)
     fig.savefig(fig_path, bbox_inches="tight", dpi=300)
     plt.close(fig)
     logger.info(f"Rendered Memory Footprint: {fig_path}")
@@ -281,14 +282,23 @@ def plot_memory_footprints(df: pd.DataFrame, output_dir: Path) -> Path:
 def plot_stability_trends(raw_results_dir: Path, output_dir: Path) -> Path:
     """
     Renders multi-session p50 tracking across Session 1 to Session 5 illustrating statistical stability.
+    Deduplicates legend entries to unique model/runtime combinations (maximum 4 entries:
+    YOLO PyTorch, YOLO ORT, Autoencoder PyTorch, Autoencoder ORT) with loc='upper right' and ncol=2.
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     fig_path = output_dir / "stability_variance_trends.png"
 
     fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
 
-    trend_plotted = False
-    for run_file in raw_results_dir.rglob("run.json"):
+    workload_styles = {
+        "YOLO PyTorch": {"color": "#1f77b4", "marker": "o"},
+        "YOLO ORT": {"color": "#ff7f0e", "marker": "s"},
+        "Autoencoder PyTorch": {"color": "#2ca02c", "marker": "^"},
+        "Autoencoder ORT": {"color": "#d62728", "marker": "d"},
+    }
+
+    unique_trends = {}
+    for run_file in sorted(raw_results_dir.rglob("run.json")):
         try:
             import json
             data = json.loads(run_file.read_text(encoding="utf-8"))
@@ -297,12 +307,45 @@ def plot_stability_trends(raw_results_dir: Path, output_dir: Path) -> Path:
             if len(sess_vals) >= 3:
                 model_meta = data.get("model_metadata", {})
                 runtime_meta = data.get("runtime_metadata", {})
-                lbl = f"{model_meta.get('model', data.get('model', 'model'))}_{runtime_meta.get('runtime', data.get('runtime', 'runtime'))}"
-                x_sess = np.arange(1, len(sess_vals) + 1)
-                ax.plot(x_sess, sess_vals, marker="o", linewidth=1.8, label=lbl, alpha=0.85)
-                trend_plotted = True
+                m = str(model_meta.get("model", data.get("model", ""))).lower()
+                r = str(runtime_meta.get("runtime", data.get("runtime", ""))).lower()
+
+                if "yolo" in m:
+                    m_name = "YOLO"
+                elif "autoencoder" in m or "cae" in m or "conv" in m:
+                    m_name = "Autoencoder"
+                else:
+                    continue
+
+                if "pytorch" in r:
+                    r_name = "PyTorch"
+                elif "ort" in r:
+                    r_name = "ORT"
+                else:
+                    continue
+
+                canonical_label = f"{m_name} {r_name}"
+                if canonical_label not in unique_trends:
+                    unique_trends[canonical_label] = sess_vals
         except Exception:
             pass
+
+    trend_plotted = False
+    for label, style in workload_styles.items():
+        if label in unique_trends:
+            sess_vals = unique_trends[label]
+            x_sess = np.arange(1, len(sess_vals) + 1)
+            ax.plot(
+                x_sess,
+                sess_vals,
+                marker=style["marker"],
+                color=style["color"],
+                linewidth=2.0,
+                markersize=7,
+                label=label,
+                alpha=0.9,
+            )
+            trend_plotted = True
 
     if not trend_plotted:
         ax.text(0.5, 0.5, "No multi-session stability data found", ha="center", va="center")
@@ -311,7 +354,7 @@ def plot_stability_trends(raw_results_dir: Path, output_dir: Path) -> Path:
     ax.set_ylabel("Median Latency $p_{50}$ (ms)", fontweight="bold")
     ax.set_title("Multi-Session Latency Drift & Stability Assessment", fontweight="bold", pad=12)
     if trend_plotted:
-        ax.legend(loc="upper right", fontsize=8)
+        ax.legend(loc="upper right", ncol=2, frameon=True, fontsize=9)
     ax.grid(True, linestyle=":", alpha=0.5)
 
     plt.tight_layout(rect=[0, 0.02, 1, 0.96])

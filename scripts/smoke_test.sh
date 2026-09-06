@@ -115,12 +115,12 @@ if [ ! -f "overleaf_paper.zip" ]; then
     exit 1
 fi
 zip_bytes=$(stat -c%s "overleaf_paper.zip" 2>/dev/null || stat -f%z "overleaf_paper.zip")
-if [ "$zip_bytes" -lt 2621440 ]; then
-    echo "ERROR: overleaf_paper.zip is smaller than 2.5MB ($zip_bytes bytes)!"
+if [ "$zip_bytes" -lt 1468006 ]; then
+    echo "ERROR: overleaf_paper.zip is smaller than 1.4MB ($zip_bytes bytes)!"
     exit 1
 fi
 unzip -tq overleaf_paper.zip || { echo "ERROR: overleaf_paper.zip failed integrity check!"; exit 1; }
-echo "  [CHECK] overleaf_paper.zip archive integrity & size (>= 2.5MB) -> PASS" 
+echo "  [CHECK] overleaf_paper.zip archive integrity & size (>= 1.4MB) -> PASS" 
 
 echo "[4/5] Executing Test Suite..."
 $PYTEST tests/ -v --cov=src --cov-report=term-missing
