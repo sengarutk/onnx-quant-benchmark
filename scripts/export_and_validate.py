@@ -90,8 +90,11 @@ def main() -> None:
 
     # Generate Markdown Documentation Report
     doc_path = PROJECT_ROOT / "docs" / "export-validation.md"
-    generate_export_validation_doc(audit_summary, doc_path)
-    logger.info(f"\nExport validation report rendered -> {doc_path}")
+    if not doc_path.is_file() or os.environ.get("FORCE_DOCS") == "1":
+        generate_export_validation_doc(audit_summary, doc_path)
+        logger.info(f"\nExport validation report rendered -> {doc_path}")
+    else:
+        logger.info(f"\nExport validation report up-to-date -> {doc_path}")
 
 
 def generate_export_validation_doc(audit_data: dict, output_path: Path) -> None:

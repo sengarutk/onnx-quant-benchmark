@@ -37,6 +37,7 @@ results/tables/*
 !results/tables/.gitkeep
 results/figures/*
 !results/figures/.gitkeep
+!results/figures/scalability_batch_resolution.png
 results/profiles/*
 !results/profiles/.gitkeep
 
