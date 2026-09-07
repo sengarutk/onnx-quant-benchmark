@@ -4,6 +4,7 @@ End-to-end CLI driver: Exports models to ONNX Opset 17, simplifies graphs, verif
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 import torch
