@@ -13,7 +13,7 @@ class ModelConfig(BaseModel):
     """Model definition, task domain, input geometry, and detection/reconstruction parameters."""
 
     name: str = Field(..., description="Unique model identifier (e.g. yolo_nano, industrial_autoencoder)")
-    task: Literal["detection", "reconstruction", "classification"] = Field(
+    task: Literal["detection", "anomaly_detection", "classification"] = Field(
         ..., description="Task domain determining metric evaluations"
     )
     input_shape: List[int] = Field(
@@ -66,45 +66,30 @@ class RuntimeConfig(BaseModel):
 
 
 class BenchmarkConfig(BaseModel):
-    """Benchmark execution protocol and timing hyperparameters."""
+    """Benchmark execution protocol and timing hyperparameters (consumed by scripts/benchmark_all.py)."""
 
     batch_size: int = Field(default=1, ge=1, description="Inference batch size")
-    warmup_iterations: int = Field(
-        default=50, ge=1, description="Unmeasured iterations to prime cache and warm kernels"
-    )
-    timed_iterations: int = Field(
-        default=300, ge=1, description="Measured iterations for latency percentile estimation"
-    )
-    stability_sessions: int = Field(
-        default=3, ge=1, description="Number of independent benchmark sessions for stability assessment"
-    )
-    cooldown_seconds: float = Field(
-        default=2.0, ge=0.0, description="Inter-session thermal cooldown duration in seconds"
-    )
-    collect_nvml: bool = Field(
-        default=True, description="Sample GPU power, temperature, and clock frequencies during runs"
-    )
-    device_id: int = Field(default=0, ge=0, description="Target execution device index")
+    warmup_iterations: int = Field(default=50, ge=1, description="Untimed model-path iterations per session")
+    timed_iterations: int = Field(default=300, ge=1, description="Timed model-path iterations per session")
+    stability_sessions: int = Field(default=5, ge=2, description="Independent measurement sessions per configuration")
+    cooldown_seconds: float = Field(default=0.5, ge=0.0, description="Pause between sessions in seconds")
+    e2e_warmup_iterations: int = Field(default=20, ge=1, description="Untimed end-to-end pipeline iterations")
+    e2e_timed_iterations: int = Field(default=200, ge=1, description="Timed end-to-end pipeline iterations")
+    cv_threshold: float = Field(default=0.05, gt=0.0, description="Max CV of session medians for a stable verdict")
+    device_id: int = Field(default=0, ge=0, description="Target GPU device index")
 
 
 class QualityThresholdConfig(BaseModel):
-    """Numerical parity tolerances and domain metric degradation thresholds."""
+    """Numerical-parity and task-quality acceptance gates for one precision tier (vs PyTorch FP32 CPU)."""
 
-    max_abs_error: float = Field(
-        default=1e-4, gt=0.0, description="Maximum allowable element-wise absolute difference vs FP32"
+    max_rel_error: float = Field(
+        default=1e-4, gt=0.0, description="Max |candidate - reference| / max|reference| over all output tensors"
     )
-    mean_abs_error: float = Field(
-        default=1e-5, gt=0.0, description="Maximum allowable mean absolute difference vs FP32"
+    min_cosine_similarity: float = Field(
+        default=0.99999, ge=-1.0, le=1.0, description="Min cosine similarity between flattened output tensors"
     )
-    max_map_drop: float = Field(
-        default=0.005, ge=0.0, description="Maximum allowable drop in mAP@0.50:0.95 for detectors"
-    )
-    max_auroc_drop: float = Field(
-        default=0.005, ge=0.0, description="Maximum allowable drop in AUROC for anomaly detectors"
-    )
-    max_aupro_drop: float = Field(
-        default=0.010, ge=0.0, description="Maximum allowable drop in AUPRO for anomaly detectors"
-    )
+    max_map_drop: float = Field(default=0.001, ge=0.0, description="Max allowed absolute drop in detector mAP@50")
+    max_auroc_drop: float = Field(default=0.001, ge=0.0, description="Max allowed absolute drop in image AUROC")
 
 
 class PathConfig(BaseModel):
@@ -132,6 +117,13 @@ class MasterConfig(BaseModel):
         default_factory=QualityThresholdConfig, description="Validation threshold block"
     )
     paths: PathConfig = Field(default_factory=PathConfig, description="Filesystem paths block")
+
+
+def load_quality_thresholds(model_name: str, precision: str, configs_dir: Union[str, Path, None] = None) -> QualityThresholdConfig:
+    """Loads the acceptance gates from configs/<model_dir>/<precision>.yaml."""
+    root = Path(configs_dir) if configs_dir else Path(__file__).resolve().parent.parent.parent / "configs"
+    model_dir = {"yolo_nano": "yolo", "industrial_autoencoder": "industrial_model"}.get(model_name, model_name)
+    return load_config(root / model_dir / f"{precision.lower()}.yaml").quality_thresholds
 
 
 def load_config(yaml_path: Union[str, Path]) -> MasterConfig:

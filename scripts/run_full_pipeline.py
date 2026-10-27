@@ -1,97 +1,73 @@
+#!/usr/bin/env python3
 """
-Master End-to-End Benchmark Pipeline Orchestrator (v1.1).
-Executes the complete 11-stage benchmark lifecycle with unified error handling,
-execution timers, and ANSI progress logging.
+End-to-end pipeline orchestrator: data -> training -> baselines -> export -> quantization -> runtime validation ->
+benchmark session -> report -> Q-Aware NMS ablation -> scalability sweep -> paper bundle.
 """
 
 import argparse
-from pathlib import Path
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
-# ANSI Color codes
-BOLD = "\033[1m"
-GREEN = "\033[92m"
-BLUE = "\033[94m"
-YELLOW = "\033[93m"
-RED = "\033[91m"
-RESET = "\033[0m"
+BOLD, GREEN, BLUE, YELLOW, RED, RESET = "\033[1m", "\033[92m", "\033[94m", "\033[93m", "\033[91m", "\033[0m"
 
 
-def run_stage(step_num: int, total_steps: int, title: str, cmd: list, dry_run: bool = False) -> float:
-    """Executes a pipeline stage with high-precision timing and formatted terminal output."""
-    prefix = f"{BOLD}[{step_num}/{total_steps}]{RESET}"
-    print(f"\n{prefix} {BLUE}Starting:{RESET} {BOLD}{title}{RESET}")
-    print(f"      {YELLOW}Command:{RESET} {' '.join(cmd)}")
-
+def run_stage(step: int, total: int, title: str, cmd: list, dry_run: bool = False) -> float:
+    prefix = f"{BOLD}[{step}/{total}]{RESET}"
+    print(f"\n{prefix} {BLUE}{title}{RESET}\n      {YELLOW}$ {' '.join(cmd)}{RESET}")
     if dry_run:
-        print(f"      {GREEN}[DRY-RUN SKIPPED]{RESET}")
         return 0.0
-
     t0 = time.perf_counter()
     res = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
-    t1 = time.perf_counter()
-    elapsed = t1 - t0
-
+    elapsed = time.perf_counter() - t0
     if res.returncode != 0:
-        print(f"\n{prefix} {RED}[FAILED]{RESET} {title} (Exit Code: {res.returncode}) in {elapsed:.2f}s")
+        print(f"{prefix} {RED}FAILED{RESET} (exit {res.returncode}) after {elapsed:.1f}s")
         sys.exit(res.returncode)
-
-    print(f"      {GREEN}[SUCCESS]{RESET} Completed in {elapsed:.2f}s")
+    print(f"      {GREEN}done{RESET} in {elapsed:.1f}s")
     return elapsed
 
 
+def build_stages(py: str, skip_training: bool, skip_paper: bool) -> list:
+    stages = [
+        ("Environment manifest & docs/hardware.md", [py, "scripts/generate_env_manifest.py"]),
+        ("Synthetic test split", [py, "scripts/prepare_sample_data.py"]),
+        ("Synthetic calibration split (+ leakage check)", [py, "scripts/prepare_calibration_data.py"]),
+    ]
+    if not skip_training:
+        stages.append(("Train detector and autoencoder", [py, "scripts/train_models.py"]))
+    stages += [
+        ("PyTorch FP32 reference metrics", [py, "scripts/run_pytorch_baselines.py"]),
+        ("ONNX export, simplification & parity audit", [py, "scripts/export_and_validate.py"]),
+        ("FP16 conversion, static INT8 PTQ & quality gates", [py, "scripts/quantize_and_validate.py"]),
+        ("Runtime backend validation", [py, "scripts/validate_runtimes.py"]),
+        ("Benchmark session (latency, stability, parity, quality)", [py, "scripts/benchmark_all.py"]),
+        ("Aggregation, tables, figures, decision matrix", [py, "scripts/generate_report.py"]),
+        ("Q-Aware NMS ablation & decision-flip audit", [py, "src/experiments/run_q_aware_ablation.py"]),
+        ("Batch x resolution scalability sweep", [py, "src/experiments/run_scalability_sweep.py"]),
+        ("Inject result tables into README.md", [py, "scripts/update_readme.py"]),
+    ]
+    if not skip_paper:
+        stages.append(("Paper tables/macros + Overleaf bundle", [py, "scripts/build_paper.py"]))
+    return stages
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Master End-to-End Benchmark Pipeline Orchestrator (v1.1)")
-    parser.add_argument("--dry-run", action="store_true", help="Print pipeline stages without executing subprocesses")
-    parser.add_argument("--skip-smoke-test", action="store_true", help="Skip final smoke test")
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dry-run", action="store_true", help="Print the stages without executing them")
+    parser.add_argument("--skip-training", action="store_true", help="Reuse existing models/weights/*_trained.pt")
+    parser.add_argument("--skip-paper", action="store_true", help="Do not rebuild the paper bundle")
     args = parser.parse_args()
 
-    # Determine Python binary
-    py_bin = sys.executable
-
-    stages = [
-        ("Environment & Hardware Introspection", [py_bin, "scripts/generate_env_manifest.py"]),
-        ("Synthetic Evaluation Dataset Generation", [py_bin, "scripts/prepare_sample_data.py"]),
-        ("PyTorch Reference Baselines & Hashing", [py_bin, "scripts/run_pytorch_baselines.py"]),
-        ("Canonical ONNX Export, Validation & Simplification", [py_bin, "scripts/export_and_validate.py"]),
-        ("Disjoint Calibration Dataset Synthesis", [py_bin, "scripts/prepare_calibration_data.py"]),
-        ("FP16 Conversion, Static INT8 PTQ & Quality Gating", [py_bin, "scripts/quantize_and_validate.py"]),
-        ("Multi-Backend Runtime Execution & MAD Stability Benchmarking", [py_bin, "scripts/benchmark_all.py"]),
-        ("Result Aggregation, Pareto Analysis, Tables & Plots", [py_bin, "scripts/generate_report.py"]),
-        ("Q-Aware NMS Calibration & Decision Flip Audit", [py_bin, "src/experiments/run_q_aware_ablation.py"]),
-        ("Scalability Sweeps Across Batch Sizes & Resolutions", [py_bin, "src/experiments/run_scalability_sweep.py"]),
-    ]
-
-    if not args.skip_smoke_test:
-        stages.append(("Automated Smoke Pipeline Verification", ["bash", "scripts/smoke_test.sh"]))
-
-    total_steps = len(stages)
-    print(f"{BOLD}{'=' * 75}{RESET}")
-    print(f"{BOLD}ONNX Edge Inference Benchmark — Master End-to-End Pipeline ({total_steps} Stages){RESET}")
-    print(f"{BOLD}{'=' * 75}{RESET}")
-
-    total_t0 = time.perf_counter()
-    stage_times = []
-
-    for idx, (title, cmd) in enumerate(stages, 1):
-        elapsed = run_stage(idx, total_steps, title, cmd, dry_run=args.dry_run)
-        stage_times.append((title, elapsed))
-
-    total_elapsed = time.perf_counter() - total_t0
-
-    print(f"\n{BOLD}{'=' * 75}{RESET}")
-    print(f"{GREEN}{BOLD}>>> PIPELINE EXECUTION COMPLETED WITH 100% SUCCESS <<< {RESET}")
-    print(f"Total Wall-Clock Time: {BOLD}{total_elapsed:.2f}s{RESET}")
-    print(f"{BOLD}{'=' * 75}{RESET}")
-    for title, el in stage_times:
-        print(f"  • {title:<60} {el:>7.2f}s")
-    print(f"{BOLD}{'=' * 75}{RESET}\n")
+    stages = build_stages(sys.executable, args.skip_training, args.skip_paper)
+    print(f"{BOLD}Edge inference benchmark pipeline ({len(stages)} stages){RESET}")
+    t0 = time.perf_counter()
+    times = [(title, run_stage(i, len(stages), title, cmd, args.dry_run)) for i, (title, cmd) in enumerate(stages, 1)]
+    print(f"\n{GREEN}{BOLD}Pipeline finished in {time.perf_counter() - t0:.1f}s{RESET}")
+    for title, el in times:
+        print(f"  - {title:<60} {el:>7.1f}s")
 
 
 if __name__ == "__main__":

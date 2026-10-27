@@ -31,8 +31,10 @@ class PyTorchRuntime(BaseRuntime):
         precision: str = "fp32",
         input_names: Optional[List[str]] = None,
         output_names: Optional[List[str]] = None,
+        num_threads: Optional[int] = None,
     ) -> None:
         super().__init__()
+        self.num_threads = num_threads
         self.model = model
         self.device_str = device
         self.device = torch.device(device)
@@ -48,16 +50,14 @@ class PyTorchRuntime(BaseRuntime):
             p.requires_grad = False
 
         if self.device.type == "cpu":
-            import os
-            import psutil
-            physical_cores = psutil.cpu_count(logical=False) or 8
-            torch.set_num_threads(physical_cores)
-            try:
-                torch.set_num_interop_threads(1)
-            except RuntimeError:
-                pass
-            os.environ["OMP_NUM_THREADS"] = str(physical_cores)
-            os.environ["MKL_NUM_THREADS"] = str(physical_cores)
+            from src.common.environment import configure_cpu_threads
+            configure_cpu_threads(self.num_threads)
+
+        if self.device.type == "cuda":
+            # "fp32" means IEEE FP32: disable TF32 tensor-core math (PyTorch enables it for cuDNN convs by default).
+            strict = self.precision == "fp32"
+            torch.backends.cudnn.allow_tf32 = not strict
+            torch.backends.cuda.matmul.allow_tf32 = not strict
 
         if self.precision == "fp16" and self.device.type == "cuda":
             self.model = self.model.half()
@@ -80,7 +80,10 @@ class PyTorchRuntime(BaseRuntime):
         return {k: v.detach().cpu().numpy().astype(np.float32) for k, v in dev_outs.items()}
 
     def predict_device(self, input_tensor: torch.Tensor) -> Dict[str, torch.Tensor]:
-        """Executes zero-copy forward pass on device tensors."""
+        """
+        Executes the forward pass on device tensors. On CUDA the call is asynchronous (no host synchronization):
+        returned tensors are stream-ordered, and callers that need host values must synchronize or copy.
+        """
         if not self.is_loaded:
             self.load()
 
@@ -102,9 +105,6 @@ class PyTorchRuntime(BaseRuntime):
         for idx, t in enumerate(out_list):
             key = self.output_names[idx] if idx < len(self.output_names) else f"output_{idx}"
             res[key] = t
-
-        if self.device.type == "cuda":
-            torch.cuda.synchronize(self.device)
 
         return res
 

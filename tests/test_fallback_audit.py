@@ -48,3 +48,22 @@ class TestFallbackAudit:
         adapter = YOLOAdapter()
         runtime = PyTorchRuntime(adapter.get_pytorch_model(), device="cpu")
         assert_zero_fallback(runtime)
+
+    def test_assert_zero_fallback_detects_parameter_placement_mismatch(self) -> None:
+        """A runtime claiming CUDA whose parameters are on CPU is rejected."""
+        from unittest.mock import MagicMock
+        rt = MagicMock(spec=["get_active_provider", "model"])
+        rt.get_active_provider.return_value = "PyTorch_CUDA:0"
+        rt.model = YOLOAdapter().get_pytorch_model()
+        with pytest.raises(RuntimeError, match="parameters reside on"):
+            assert_zero_fallback(rt)
+
+    def test_assert_zero_fallback_ort_session(self) -> None:
+        root = Path(__file__).resolve().parent.parent
+        onnx_p = root / "models" / "exported" / "yolo_nano_fp32_opset17.onnx"
+        if not onnx_p.is_file():
+            pytest.skip("Exported ONNX model not found")
+        from src.runtimes.ort_cpu_runtime import ORTCPURuntime
+        rt = ORTCPURuntime(onnx_p)
+        rt.load()
+        assert_zero_fallback(rt)

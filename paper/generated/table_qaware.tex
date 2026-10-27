@@ -1,0 +1,10 @@
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{Configuration} & $(\tau_c^*, \tau_i^*)$ & \textbf{F1 def.} & \textbf{F1 FP32-thr.} & \textbf{F1 own} & \textbf{$\Delta$ own vs FP32-thr. [95\% CI]} & \textbf{$p_{\text{Holm}}$} \\
+\midrule
+PyTorch FP32 (CPU) & (0.80, 0.05) & 0.089 & 0.712 & 0.712 & +0.000 [+0.000, +0.000] & $1$ \\
+ORT FP32 (CPU) & (0.80, 0.05) & 0.089 & 0.712 & 0.712 & +0.000 [+0.000, +0.000] & $1$ \\
+ORT FP16 (CPU) & (0.80, 0.05) & 0.088 & 0.712 & 0.712 & +0.000 [+0.000, +0.000] & $1$ \\
+ORT INT8 (CPU) & (0.75, 0.10) & 0.085 & 0.794 & 0.785 & -0.008 [-0.029, +0.013] & $0.35$ \\
+\bottomrule
+\end{tabular}

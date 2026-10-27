@@ -1,0 +1,2154 @@
+{
+  "session": {
+    "session_id": "session_20261027T011458Z",
+    "protocol": {
+      "warmup_iterations": 50,
+      "timed_iterations": 300,
+      "stability_sessions": 5,
+      "cooldown_seconds": 0.5,
+      "cv_threshold": 0.05,
+      "e2e_warmup_iterations": 20,
+      "e2e_timed_iterations": 200
+    },
+    "quick": false,
+    "executed": [
+      "yolo_nano/PyTorch/fp32",
+      "yolo_nano/PyTorch/fp32",
+      "yolo_nano/PyTorch/fp16",
+      "yolo_nano/ORT_CPU/fp32",
+      "yolo_nano/ORT_CPU/fp16",
+      "yolo_nano/ORT_CPU/int8",
+      "industrial_autoencoder/PyTorch/fp32",
+      "industrial_autoencoder/PyTorch/fp32",
+      "industrial_autoencoder/PyTorch/fp16",
+      "industrial_autoencoder/ORT_CPU/fp32",
+      "industrial_autoencoder/ORT_CPU/fp16",
+      "industrial_autoencoder/ORT_CPU/int8"
+    ],
+    "skipped": [
+      {
+        "config": "yolo_nano/ORT_CUDA/fp32",
+        "reason": "CUDAExecutionProvider not available in the installed onnxruntime build"
+      },
+      {
+        "config": "yolo_nano/ORT_CUDA/fp16",
+        "reason": "CUDAExecutionProvider not available in the installed onnxruntime build"
+      },
+      {
+        "config": "yolo_nano/TensorRT/fp32",
+        "reason": "tensorrt Python bindings not installed"
+      },
+      {
+        "config": "yolo_nano/TensorRT/fp16",
+        "reason": "tensorrt Python bindings not installed"
+      },
+      {
+        "config": "yolo_nano/TensorRT/int8",
+        "reason": "tensorrt Python bindings not installed"
+      },
+      {
+        "config": "industrial_autoencoder/ORT_CUDA/fp32",
+        "reason": "CUDAExecutionProvider not available in the installed onnxruntime build"
+      },
+      {
+        "config": "industrial_autoencoder/ORT_CUDA/fp16",
+        "reason": "CUDAExecutionProvider not available in the installed onnxruntime build"
+      },
+      {
+        "config": "industrial_autoencoder/TensorRT/fp32",
+        "reason": "tensorrt Python bindings not installed"
+      },
+      {
+        "config": "industrial_autoencoder/TensorRT/fp16",
+        "reason": "tensorrt Python bindings not installed"
+      },
+      {
+        "config": "industrial_autoencoder/TensorRT/int8",
+        "reason": "tensorrt Python bindings not installed"
+      }
+    ],
+    "environment_manifest": {
+      "timestamp": "2026-10-27T01:14:58.872942+00:00",
+      "git_commit": "9878499-dirty",
+      "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+      "os_info": "Ubuntu 24.04.4 LTS | Linux 6.6.87.2-microsoft-standard-WSL2 (x86_64)",
+      "cpu_info": "13th Gen Intel(R) Core(TM) i5-13450HX (8 cores / 16 threads visible to the OS)",
+      "ram_total_gb": 11.54,
+      "gpu_available": true,
+      "gpu_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+      "gpu_vram_total_gb": 6.0,
+      "gpu_compute_capability": "8.9",
+      "nvidia_driver_version": "581.86",
+      "cuda_runtime_version": "12.1",
+      "cudnn_version": "9.10.2",
+      "tensorrt_version": "NOT_INSTALLED",
+      "onnx_version": "1.20.1",
+      "onnxruntime_version": "1.23.2 (providers: AzureExecutionProvider, CPUExecutionProvider)",
+      "torch_version": "2.5.1+cu121"
+    }
+  },
+  "runs": [
+    {
+      "run_id": "industrial_autoencoder_ORT_CPU_fp16_20261027_012005",
+      "session_id": "session_20261027T011458Z",
+      "timestamp": "2026-10-27T01:20:35.149768+00:00",
+      "status": "PASS",
+      "model_metadata": {
+        "model": "industrial_autoencoder",
+        "task": "anomaly_detection",
+        "precision": "fp16",
+        "batch_size": 1,
+        "input_shape": [
+          1,
+          3,
+          256,
+          256
+        ],
+        "model_size_mb": 2.7017,
+        "model_size_source": "serialized_file",
+        "model_file": "models/exported/industrial_autoencoder_fp16.onnx",
+        "model_sha256": "b4c42e02259a1f5a17c45011cc6d5eb78e8804e2dcb79842bce7f8ebb5dea76e"
+      },
+      "runtime_metadata": {
+        "runtime": "ORT_CPU",
+        "provider": "CPUExecutionProvider"
+      },
+      "protocol": {
+        "warmup_iterations": 50,
+        "timed_iterations": 300,
+        "stability_sessions": 5,
+        "cooldown_seconds": 0.5,
+        "cv_threshold": 0.05,
+        "e2e_warmup_iterations": 20,
+        "e2e_timed_iterations": 200
+      },
+      "environment_manifest": {
+        "timestamp": "2026-10-27T01:14:58.872942+00:00",
+        "git_commit": "9878499-dirty",
+        "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+        "os_info": "Ubuntu 24.04.4 LTS | Linux 6.6.87.2-microsoft-standard-WSL2 (x86_64)",
+        "cpu_info": "13th Gen Intel(R) Core(TM) i5-13450HX (8 cores / 16 threads visible to the OS)",
+        "ram_total_gb": 11.54,
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "gpu_vram_total_gb": 6.0,
+        "gpu_compute_capability": "8.9",
+        "nvidia_driver_version": "581.86",
+        "cuda_runtime_version": "12.1",
+        "cudnn_version": "9.10.2",
+        "tensorrt_version": "NOT_INSTALLED",
+        "onnx_version": "1.20.1",
+        "onnxruntime_version": "1.23.2 (providers: AzureExecutionProvider, CPUExecutionProvider)",
+        "torch_version": "2.5.1+cu121"
+      },
+      "model_path_latency_ms": {
+        "p50_ms": 8.920819999999999,
+        "p90_ms": 10.079363200000003,
+        "p95_ms": 10.45560015,
+        "p99_ms": 11.99380601,
+        "mean_ms": 9.001215564,
+        "std_ms": 0.8701429729420206,
+        "min_ms": 7.737502,
+        "max_ms": 14.422275,
+        "throughput_fps": 112.09731840794906,
+        "p50_ci95_ms": [
+          8.8971143,
+          8.947213
+        ],
+        "p95_ci95_ms": [
+          10.3865074375,
+          10.563988
+        ],
+        "samples": 1500
+      },
+      "end_to_end_latency_ms": {
+        "p50": 11.174967,
+        "p90": 12.7844165,
+        "p95": 13.321004399999998,
+        "p99": 14.127300059999998,
+        "mean": 11.340187559999999,
+        "std": 1.0177828752495084,
+        "throughput_fps": 89.48572286611673,
+        "iterations": 200,
+        "stages_p50": {
+          "preprocess": 1.5720445,
+          "inference": 8.989754000000001,
+          "postprocess": 0.5601430000000001
+        },
+        "stages_mean": {
+          "preprocess": 1.5799498749999998,
+          "inference": 9.212827685,
+          "postprocess": 0.54741
+        }
+      },
+      "memory_utilization": {
+        "peak_vram_allocated_mb": 0.0,
+        "peak_vram_reserved_mb": 0.0,
+        "process_rss_mb": 1587.32,
+        "nvml_gpu_memory_used_mb": 0.0
+      },
+      "stability_audit": {
+        "session_p50_values": [
+          8.840507,
+          9.0071175,
+          8.9333635,
+          8.95944,
+          8.8883595
+        ],
+        "session_p95_values": [
+          10.112748000000002,
+          10.630251150000001,
+          10.451765850000001,
+          10.358759,
+          10.9360044
+        ],
+        "cv_p50": 0.006431660079037673,
+        "cv_p50_mad_filtered": 0.006431660079037673,
+        "initial_cv_p50": 0.006431660079037673,
+        "supplemental_sessions_run": false,
+        "stable": true,
+        "stability_warning": null,
+        "total_sessions": 5
+      },
+      "numerical_checks": {
+        "per_output": {
+          "reconstruction": {
+            "max_abs_error": 0.0003764033317565918,
+            "mean_abs_error": 0.00010801088167985047,
+            "max_rel_error": 0.0005291356412193899,
+            "rmse": 0.00013027447902130073,
+            "cosine_similarity": 0.9999999718586369,
+            "nan_count": 0,
+            "inf_count": 0
+          },
+          "anomaly_map": {
+            "max_abs_error": 0.00021431967616081238,
+            "mean_abs_error": 4.647787415035243e-05,
+            "max_rel_error": 0.0018622602636497777,
+            "rmse": 5.709799317279953e-05,
+            "cosine_similarity": 0.9999954798709118,
+            "nan_count": 0,
+            "inf_count": 0
+          }
+        },
+        "max_abs_error": 0.0003764033317565918,
+        "mean_abs_error": 0.00010801088167985047,
+        "max_rel_error": 0.0018622602636497777,
+        "cosine_similarity": 0.9999954798709118,
+        "nan_count": 0,
+        "inf_count": 0,
+        "thresholds": {
+          "max_rel_error": 0.005,
+          "min_cosine_similarity": 0.9999
+        },
+        "passed": true
+      },
+      "quality_audit": {
+        "metric": "image_auroc",
+        "value": 0.9306,
+        "reference_value": 0.9309,
+        "delta": -0.00029999999999996696,
+        "max_allowed_drop": 0.005,
+        "all_metrics": {
+          "image_auroc": 0.9306,
+          "pixel_auroc": 0.6192,
+          "aupro": 0.801
+        },
+        "reference_metrics": {
+          "image_auroc": 0.9309,
+          "pixel_auroc": 0.6193,
+          "aupro": 0.8011
+        },
+        "passed": true
+      }
+    },
+    {
+      "run_id": "industrial_autoencoder_ORT_CPU_fp32_20261027_011941",
+      "session_id": "session_20261027T011458Z",
+      "timestamp": "2026-10-27T01:20:05.332395+00:00",
+      "status": "PASS",
+      "model_metadata": {
+        "model": "industrial_autoencoder",
+        "task": "anomaly_detection",
+        "precision": "fp32",
+        "batch_size": 1,
+        "input_shape": [
+          1,
+          3,
+          256,
+          256
+        ],
+        "model_size_mb": 5.397,
+        "model_size_source": "serialized_file",
+        "model_file": "models/exported/industrial_autoencoder_fp32_opset17.onnx",
+        "model_sha256": "b4a9a1b3ed2b20b865d1f2805f9aa95a1a200b82d9b2bf1d8731677e59e1209b"
+      },
+      "runtime_metadata": {
+        "runtime": "ORT_CPU",
+        "provider": "CPUExecutionProvider"
+      },
+      "protocol": {
+        "warmup_iterations": 50,
+        "timed_iterations": 300,
+        "stability_sessions": 5,
+        "cooldown_seconds": 0.5,
+        "cv_threshold": 0.05,
+        "e2e_warmup_iterations": 20,
+        "e2e_timed_iterations": 200
+      },
+      "environment_manifest": {
+        "timestamp": "2026-10-27T01:14:58.872942+00:00",
+        "git_commit": "9878499-dirty",
+        "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+        "os_info": "Ubuntu 24.04.4 LTS | Linux 6.6.87.2-microsoft-standard-WSL2 (x86_64)",
+        "cpu_info": "13th Gen Intel(R) Core(TM) i5-13450HX (8 cores / 16 threads visible to the OS)",
+        "ram_total_gb": 11.54,
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "gpu_vram_total_gb": 6.0,
+        "gpu_compute_capability": "8.9",
+        "nvidia_driver_version": "581.86",
+        "cuda_runtime_version": "12.1",
+        "cudnn_version": "9.10.2",
+        "tensorrt_version": "NOT_INSTALLED",
+        "onnx_version": "1.20.1",
+        "onnxruntime_version": "1.23.2 (providers: AzureExecutionProvider, CPUExecutionProvider)",
+        "torch_version": "2.5.1+cu121"
+      },
+      "model_path_latency_ms": {
+        "p50_ms": 6.133221499999999,
+        "p90_ms": 7.4045538,
+        "p95_ms": 7.831521099999999,
+        "p99_ms": 9.116849149999998,
+        "mean_ms": 6.387231385333332,
+        "std_ms": 1.488474348129586,
+        "min_ms": 5.194122,
+        "max_ms": 47.606774,
+        "throughput_fps": 163.04645120023793,
+        "p50_ci95_ms": [
+          6.114867,
+          6.158755800000001
+        ],
+        "p95_ci95_ms": [
+          7.677044949999999,
+          8.02817815
+        ],
+        "samples": 1500
+      },
+      "end_to_end_latency_ms": {
+        "p50": 7.9049025,
+        "p90": 8.814381000000001,
+        "p95": 9.079459799999999,
+        "p99": 10.016524249999998,
+        "mean": 8.004601809999999,
+        "std": 0.6157402281675967,
+        "throughput_fps": 126.50377408197002,
+        "iterations": 200,
+        "stages_p50": {
+          "preprocess": 1.5086175000000002,
+          "inference": 5.9085905,
+          "postprocess": 0.4297915
+        },
+        "stages_mean": {
+          "preprocess": 1.5180344350000001,
+          "inference": 6.053229985000001,
+          "postprocess": 0.43333738999999993
+        }
+      },
+      "memory_utilization": {
+        "peak_vram_allocated_mb": 0.0,
+        "peak_vram_reserved_mb": 0.0,
+        "process_rss_mb": 1574.14,
+        "nvml_gpu_memory_used_mb": 0.0
+      },
+      "stability_audit": {
+        "session_p50_values": [
+          6.1896284999999995,
+          6.153492,
+          6.1539055000000005,
+          6.0511105,
+          6.0979135
+        ],
+        "session_p95_values": [
+          8.43604945,
+          7.5812212500000005,
+          7.996728150000001,
+          7.2463302,
+          7.860698350000001
+        ],
+        "cv_p50": 0.007969119752855292,
+        "cv_p50_mad_filtered": 0.007969119752855292,
+        "initial_cv_p50": 0.007969119752855292,
+        "supplemental_sessions_run": false,
+        "stable": true,
+        "stability_warning": null,
+        "total_sessions": 5
+      },
+      "numerical_checks": {
+        "per_output": {
+          "reconstruction": {
+            "max_abs_error": 2.384185791015625e-07,
+            "mean_abs_error": 2.5149802240775898e-08,
+            "max_rel_error": 3.3516113458076955e-07,
+            "rmse": 3.913223308127941e-08,
+            "cosine_similarity": 0.9999999999999977,
+            "nan_count": 0,
+            "inf_count": 0
+          },
+          "anomaly_map": {
+            "max_abs_error": 1.387670636177063e-07,
+            "mean_abs_error": 1.8583167338270812e-08,
+            "max_rel_error": 1.2057707118067514e-06,
+            "rmse": 2.524728169653536e-08,
+            "cosine_similarity": 0.9999999999991209,
+            "nan_count": 0,
+            "inf_count": 0
+          }
+        },
+        "max_abs_error": 2.384185791015625e-07,
+        "mean_abs_error": 2.5149802240775898e-08,
+        "max_rel_error": 1.2057707118067514e-06,
+        "cosine_similarity": 0.9999999999991209,
+        "nan_count": 0,
+        "inf_count": 0,
+        "thresholds": {
+          "max_rel_error": 0.0001,
+          "min_cosine_similarity": 0.99999
+        },
+        "passed": true
+      },
+      "quality_audit": {
+        "metric": "image_auroc",
+        "value": 0.9309,
+        "reference_value": 0.9309,
+        "delta": 0.0,
+        "max_allowed_drop": 0.001,
+        "all_metrics": {
+          "image_auroc": 0.9309,
+          "pixel_auroc": 0.6193,
+          "aupro": 0.8011
+        },
+        "reference_metrics": {
+          "image_auroc": 0.9309,
+          "pixel_auroc": 0.6193,
+          "aupro": 0.8011
+        },
+        "passed": true
+      }
+    },
+    {
+      "run_id": "industrial_autoencoder_ORT_CPU_int8_20261027_012035",
+      "session_id": "session_20261027T011458Z",
+      "timestamp": "2026-10-27T01:20:58.661049+00:00",
+      "status": "PASS",
+      "model_metadata": {
+        "model": "industrial_autoencoder",
+        "task": "anomaly_detection",
+        "precision": "int8",
+        "batch_size": 1,
+        "input_shape": [
+          1,
+          3,
+          256,
+          256
+        ],
+        "model_size_mb": 1.389,
+        "model_size_source": "serialized_file",
+        "model_file": "models/exported/industrial_autoencoder_static_int8.onnx",
+        "model_sha256": "90023405d8b5846dde06c7492a8c75c5ea6ca9d9f41981f90af33490831e5dcb"
+      },
+      "runtime_metadata": {
+        "runtime": "ORT_CPU",
+        "provider": "CPUExecutionProvider"
+      },
+      "protocol": {
+        "warmup_iterations": 50,
+        "timed_iterations": 300,
+        "stability_sessions": 5,
+        "cooldown_seconds": 0.5,
+        "cv_threshold": 0.05,
+        "e2e_warmup_iterations": 20,
+        "e2e_timed_iterations": 200
+      },
+      "environment_manifest": {
+        "timestamp": "2026-10-27T01:14:58.872942+00:00",
+        "git_commit": "9878499-dirty",
+        "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+        "os_info": "Ubuntu 24.04.4 LTS | Linux 6.6.87.2-microsoft-standard-WSL2 (x86_64)",
+        "cpu_info": "13th Gen Intel(R) Core(TM) i5-13450HX (8 cores / 16 threads visible to the OS)",
+        "ram_total_gb": 11.54,
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "gpu_vram_total_gb": 6.0,
+        "gpu_compute_capability": "8.9",
+        "nvidia_driver_version": "581.86",
+        "cuda_runtime_version": "12.1",
+        "cudnn_version": "9.10.2",
+        "tensorrt_version": "NOT_INSTALLED",
+        "onnx_version": "1.20.1",
+        "onnxruntime_version": "1.23.2 (providers: AzureExecutionProvider, CPUExecutionProvider)",
+        "torch_version": "2.5.1+cu121"
+      },
+      "model_path_latency_ms": {
+        "p50_ms": 5.875132000000001,
+        "p90_ms": 6.8965022000000005,
+        "p95_ms": 7.36556105,
+        "p99_ms": 9.18794719,
+        "mean_ms": 6.059629995333334,
+        "std_ms": 1.350838216120718,
+        "min_ms": 4.778355,
+        "max_ms": 38.940565,
+        "throughput_fps": 170.20894168845908,
+        "p50_ci95_ms": [
+          5.8314255,
+          5.91742
+        ],
+        "p95_ci95_ms": [
+          7.2098764,
+          7.665252699999998
+        ],
+        "samples": 1500
+      },
+      "end_to_end_latency_ms": {
+        "p50": 7.656581,
+        "p90": 8.3201198,
+        "p95": 8.716995799999998,
+        "p99": 9.234695619999998,
+        "mean": 7.620759325000002,
+        "std": 0.6087720736312149,
+        "throughput_fps": 130.60659842820183,
+        "iterations": 200,
+        "stages_p50": {
+          "preprocess": 1.5360985,
+          "inference": 5.615686500000001,
+          "postprocess": 0.445515
+        },
+        "stages_mean": {
+          "preprocess": 1.5434358450000003,
+          "inference": 5.627106315,
+          "postprocess": 0.45021716500000003
+        }
+      },
+      "memory_utilization": {
+        "peak_vram_allocated_mb": 0.0,
+        "peak_vram_reserved_mb": 0.0,
+        "process_rss_mb": 1576.03,
+        "nvml_gpu_memory_used_mb": 0.0
+      },
+      "stability_audit": {
+        "session_p50_values": [
+          5.726782,
+          5.7445375,
+          6.0895725,
+          6.0948720000000005,
+          5.753035000000001
+        ],
+        "session_p95_values": [
+          6.9665882,
+          6.611523050000001,
+          9.142846050000001,
+          7.71599195,
+          6.89687365
+        ],
+        "cv_p50": 0.02925293848092373,
+        "cv_p50_mad_filtered": 0.001905028317435647,
+        "initial_cv_p50": 0.02925293848092373,
+        "supplemental_sessions_run": false,
+        "stable": true,
+        "stability_warning": null,
+        "total_sessions": 5
+      },
+      "numerical_checks": {
+        "per_output": {
+          "reconstruction": {
+            "max_abs_error": 0.01658150553703308,
+            "mean_abs_error": 0.00276613949260233,
+            "max_rel_error": 0.023309744692681537,
+            "rmse": 0.0034712364653024983,
+            "cosine_similarity": 0.9999799971735881,
+            "nan_count": 0,
+            "inf_count": 0
+          },
+          "anomaly_map": {
+            "max_abs_error": 0.009581109508872032,
+            "mean_abs_error": 0.001832651730868995,
+            "max_rel_error": 0.08325189660449789,
+            "rmse": 0.002302383236239657,
+            "cosine_similarity": 0.9928025920876713,
+            "nan_count": 0,
+            "inf_count": 0
+          }
+        },
+        "max_abs_error": 0.01658150553703308,
+        "mean_abs_error": 0.00276613949260233,
+        "max_rel_error": 0.08325189660449789,
+        "cosine_similarity": 0.9928025920876713,
+        "nan_count": 0,
+        "inf_count": 0,
+        "thresholds": {
+          "max_rel_error": 0.1,
+          "min_cosine_similarity": 0.99
+        },
+        "passed": true
+      },
+      "quality_audit": {
+        "metric": "image_auroc",
+        "value": 0.9145,
+        "reference_value": 0.9309,
+        "delta": -0.01639999999999997,
+        "max_allowed_drop": 0.02,
+        "all_metrics": {
+          "image_auroc": 0.9145,
+          "pixel_auroc": 0.6195,
+          "aupro": 0.7993
+        },
+        "reference_metrics": {
+          "image_auroc": 0.9309,
+          "pixel_auroc": 0.6193,
+          "aupro": 0.8011
+        },
+        "passed": true
+      }
+    },
+    {
+      "run_id": "industrial_autoencoder_PyTorch_fp16_20261027_011928",
+      "session_id": "session_20261027T011458Z",
+      "timestamp": "2026-10-27T01:19:41.305309+00:00",
+      "status": "PASS",
+      "model_metadata": {
+        "model": "industrial_autoencoder",
+        "task": "anomaly_detection",
+        "precision": "fp16",
+        "batch_size": 1,
+        "input_shape": [
+          1,
+          3,
+          256,
+          256
+        ],
+        "model_size_mb": 2.7032,
+        "model_size_source": "parameters_and_buffers",
+        "model_file": null,
+        "model_sha256": null
+      },
+      "runtime_metadata": {
+        "runtime": "PyTorch",
+        "provider": "PyTorch_CUDA:0"
+      },
+      "protocol": {
+        "warmup_iterations": 50,
+        "timed_iterations": 300,
+        "stability_sessions": 5,
+        "cooldown_seconds": 0.5,
+        "cv_threshold": 0.05,
+        "e2e_warmup_iterations": 20,
+        "e2e_timed_iterations": 200
+      },
+      "environment_manifest": {
+        "timestamp": "2026-10-27T01:14:58.872942+00:00",
+        "git_commit": "9878499-dirty",
+        "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+        "os_info": "Ubuntu 24.04.4 LTS | Linux 6.6.87.2-microsoft-standard-WSL2 (x86_64)",
+        "cpu_info": "13th Gen Intel(R) Core(TM) i5-13450HX (8 cores / 16 threads visible to the OS)",
+        "ram_total_gb": 11.54,
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "gpu_vram_total_gb": 6.0,
+        "gpu_compute_capability": "8.9",
+        "nvidia_driver_version": "581.86",
+        "cuda_runtime_version": "12.1",
+        "cudnn_version": "9.10.2",
+        "tensorrt_version": "NOT_INSTALLED",
+        "onnx_version": "1.20.1",
+        "onnxruntime_version": "1.23.2 (providers: AzureExecutionProvider, CPUExecutionProvider)",
+        "torch_version": "2.5.1+cu121"
+      },
+      "model_path_latency_ms": {
+        "p50_ms": 1.0117119550704956,
+        "p90_ms": 1.2216320037841797,
+        "p95_ms": 1.4517247617244713,
+        "p99_ms": 3.243235099315643,
+        "mean_ms": 1.090355605840683,
+        "std_ms": 0.417009922480833,
+        "min_ms": 0.5734400153160095,
+        "max_ms": 4.590591907501221,
+        "throughput_fps": 988.4236268912335,
+        "p50_ci95_ms": [
+          1.0076160430908203,
+          1.0178560018539429
+        ],
+        "p95_ci95_ms": [
+          1.363968014717102,
+          1.6093667027354235
+        ],
+        "samples": 1500
+      },
+      "end_to_end_latency_ms": {
+        "p50": 3.3853135,
+        "p90": 3.6860693,
+        "p95": 3.81153435,
+        "p99": 4.50057149,
+        "mean": 3.4468382099999997,
+        "std": 0.23581104489343985,
+        "throughput_fps": 295.39361716425964,
+        "iterations": 200,
+        "stages_p50": {
+          "preprocess": 1.288283,
+          "inference": 1.8287635,
+          "postprocess": 0.247799
+        },
+        "stages_mean": {
+          "preprocess": 1.29928954,
+          "inference": 1.8890187900000002,
+          "postprocess": 0.25852988000000005
+        }
+      },
+      "memory_utilization": {
+        "peak_vram_allocated_mb": 7.73,
+        "peak_vram_reserved_mb": 28.0,
+        "process_rss_mb": 1596.26,
+        "nvml_gpu_memory_used_mb": 352.59
+      },
+      "stability_audit": {
+        "session_p50_values": [
+          1.0444799661636353,
+          1.0106879472732544,
+          1.0362880229949951,
+          1.001471996307373,
+          0.9902080297470093
+        ],
+        "session_p95_values": [
+          1.3754879832267761,
+          1.1270655930042268,
+          3.237120079994202,
+          1.3650432169437412,
+          1.1718543469905853
+        ],
+        "cv_p50": 0.02027955845867197,
+        "cv_p50_mad_filtered": 0.02027955845867197,
+        "initial_cv_p50": 0.02027955845867197,
+        "supplemental_sessions_run": false,
+        "stable": true,
+        "stability_warning": null,
+        "total_sessions": 5
+      },
+      "numerical_checks": {
+        "per_output": {
+          "reconstruction": {
+            "max_abs_error": 0.000639796257019043,
+            "mean_abs_error": 0.00012321115749121722,
+            "max_rel_error": 0.0008994049046474951,
+            "rmse": 0.00015374896133731714,
+            "cosine_similarity": 0.9999999621296813,
+            "nan_count": 0,
+            "inf_count": 0
+          },
+          "anomaly_map": {
+            "max_abs_error": 0.0004288754425942898,
+            "mean_abs_error": 7.790273440566597e-05,
+            "max_rel_error": 0.003726571955993804,
+            "rmse": 9.948259597973722e-05,
+            "cosine_similarity": 0.9999863612176326,
+            "nan_count": 0,
+            "inf_count": 0
+          }
+        },
+        "max_abs_error": 0.000639796257019043,
+        "mean_abs_error": 0.00012321115749121722,
+        "max_rel_error": 0.003726571955993804,
+        "cosine_similarity": 0.9999863612176326,
+        "nan_count": 0,
+        "inf_count": 0,
+        "thresholds": {
+          "max_rel_error": 0.005,
+          "min_cosine_similarity": 0.9999
+        },
+        "passed": true
+      },
+      "quality_audit": {
+        "metric": "image_auroc",
+        "value": 0.9308,
+        "reference_value": 0.9309,
+        "delta": -9.999999999998899e-05,
+        "max_allowed_drop": 0.005,
+        "all_metrics": {
+          "image_auroc": 0.9308,
+          "pixel_auroc": 0.6195,
+          "aupro": 0.801
+        },
+        "reference_metrics": {
+          "image_auroc": 0.9309,
+          "pixel_auroc": 0.6193,
+          "aupro": 0.8011
+        },
+        "passed": true
+      }
+    },
+    {
+      "run_id": "industrial_autoencoder_PyTorch_fp32_20261027_011845",
+      "session_id": "session_20261027T011458Z",
+      "timestamp": "2026-10-27T01:19:09.221719+00:00",
+      "status": "PASS",
+      "model_metadata": {
+        "model": "industrial_autoencoder",
+        "task": "anomaly_detection",
+        "precision": "fp32",
+        "batch_size": 1,
+        "input_shape": [
+          1,
+          3,
+          256,
+          256
+        ],
+        "model_size_mb": 5.4063,
+        "model_size_source": "parameters_and_buffers",
+        "model_file": null,
+        "model_sha256": null
+      },
+      "runtime_metadata": {
+        "runtime": "PyTorch",
+        "provider": "PyTorch_CPU"
+      },
+      "protocol": {
+        "warmup_iterations": 50,
+        "timed_iterations": 300,
+        "stability_sessions": 5,
+        "cooldown_seconds": 0.5,
+        "cv_threshold": 0.05,
+        "e2e_warmup_iterations": 20,
+        "e2e_timed_iterations": 200
+      },
+      "environment_manifest": {
+        "timestamp": "2026-10-27T01:14:58.872942+00:00",
+        "git_commit": "9878499-dirty",
+        "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+        "os_info": "Ubuntu 24.04.4 LTS | Linux 6.6.87.2-microsoft-standard-WSL2 (x86_64)",
+        "cpu_info": "13th Gen Intel(R) Core(TM) i5-13450HX (8 cores / 16 threads visible to the OS)",
+        "ram_total_gb": 11.54,
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "gpu_vram_total_gb": 6.0,
+        "gpu_compute_capability": "8.9",
+        "nvidia_driver_version": "581.86",
+        "cuda_runtime_version": "12.1",
+        "cudnn_version": "9.10.2",
+        "tensorrt_version": "NOT_INSTALLED",
+        "onnx_version": "1.20.1",
+        "onnxruntime_version": "1.23.2 (providers: AzureExecutionProvider, CPUExecutionProvider)",
+        "torch_version": "2.5.1+cu121"
+      },
+      "model_path_latency_ms": {
+        "p50_ms": 5.6753515,
+        "p90_ms": 6.9435009,
+        "p95_ms": 7.2924892,
+        "p99_ms": 8.191503019999999,
+        "mean_ms": 5.907781689333333,
+        "std_ms": 0.6950169010443882,
+        "min_ms": 5.047034,
+        "max_ms": 10.56901,
+        "throughput_fps": 176.20054017799603,
+        "p50_ci95_ms": [
+          5.649933000000001,
+          5.7120405000000005
+        ],
+        "p95_ci95_ms": [
+          7.181776,
+          7.354952299999998
+        ],
+        "samples": 1500
+      },
+      "end_to_end_latency_ms": {
+        "p50": 8.093697500000001,
+        "p90": 9.4284654,
+        "p95": 10.2366339,
+        "p99": 10.980430059999998,
+        "mean": 8.35857459,
+        "std": 0.8356011386552091,
+        "throughput_fps": 123.55292497650174,
+        "iterations": 200,
+        "stages_p50": {
+          "preprocess": 1.485675,
+          "inference": 6.143743499999999,
+          "postprocess": 0.429149
+        },
+        "stages_mean": {
+          "preprocess": 1.501413425,
+          "inference": 6.423159275000001,
+          "postprocess": 0.43400189
+        }
+      },
+      "memory_utilization": {
+        "peak_vram_allocated_mb": 0.0,
+        "peak_vram_reserved_mb": 0.0,
+        "process_rss_mb": 1485.44,
+        "nvml_gpu_memory_used_mb": 0.0
+      },
+      "stability_audit": {
+        "session_p50_values": [
+          5.8932175,
+          5.5458335000000005,
+          5.657638,
+          5.643488,
+          5.5416595
+        ],
+        "session_p95_values": [
+          7.3474702,
+          7.30120005,
+          6.928484600000001,
+          7.47066955,
+          7.179995100000001
+        ],
+        "cv_p50": 0.022590812011539212,
+        "cv_p50_mad_filtered": 0.022590812011539212,
+        "initial_cv_p50": 0.022590812011539212,
+        "supplemental_sessions_run": false,
+        "stable": true,
+        "stability_warning": null,
+        "total_sessions": 5
+      },
+      "numerical_checks": {
+        "per_output": {
+          "reconstruction": {
+            "max_abs_error": 0.0,
+            "mean_abs_error": 0.0,
+            "max_rel_error": 0.0,
+            "rmse": 0.0,
+            "cosine_similarity": 1.0000000000000002,
+            "nan_count": 0,
+            "inf_count": 0
+          },
+          "anomaly_map": {
+            "max_abs_error": 0.0,
+            "mean_abs_error": 0.0,
+            "max_rel_error": 0.0,
+            "rmse": 0.0,
+            "cosine_similarity": 1.0,
+            "nan_count": 0,
+            "inf_count": 0
+          }
+        },
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_rel_error": 0.0,
+        "cosine_similarity": 1.0,
+        "nan_count": 0,
+        "inf_count": 0,
+        "thresholds": {
+          "max_rel_error": 0.0001,
+          "min_cosine_similarity": 0.99999
+        },
+        "passed": true
+      },
+      "quality_audit": {
+        "metric": "image_auroc",
+        "value": 0.9309,
+        "reference_value": 0.9309,
+        "delta": 0.0,
+        "max_allowed_drop": 0.001,
+        "all_metrics": {
+          "image_auroc": 0.9309,
+          "pixel_auroc": 0.6193,
+          "aupro": 0.8011
+        },
+        "reference_metrics": {
+          "image_auroc": 0.9309,
+          "pixel_auroc": 0.6193,
+          "aupro": 0.8011
+        },
+        "passed": true
+      }
+    },
+    {
+      "run_id": "industrial_autoencoder_PyTorch_fp32_20261027_011909",
+      "session_id": "session_20261027T011458Z",
+      "timestamp": "2026-10-27T01:19:28.483545+00:00",
+      "status": "PASS",
+      "model_metadata": {
+        "model": "industrial_autoencoder",
+        "task": "anomaly_detection",
+        "precision": "fp32",
+        "batch_size": 1,
+        "input_shape": [
+          1,
+          3,
+          256,
+          256
+        ],
+        "model_size_mb": 5.4063,
+        "model_size_source": "parameters_and_buffers",
+        "model_file": null,
+        "model_sha256": null
+      },
+      "runtime_metadata": {
+        "runtime": "PyTorch",
+        "provider": "PyTorch_CUDA:0"
+      },
+      "protocol": {
+        "warmup_iterations": 50,
+        "timed_iterations": 300,
+        "stability_sessions": 5,
+        "cooldown_seconds": 0.5,
+        "cv_threshold": 0.05,
+        "e2e_warmup_iterations": 20,
+        "e2e_timed_iterations": 200
+      },
+      "environment_manifest": {
+        "timestamp": "2026-10-27T01:14:58.872942+00:00",
+        "git_commit": "9878499-dirty",
+        "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+        "os_info": "Ubuntu 24.04.4 LTS | Linux 6.6.87.2-microsoft-standard-WSL2 (x86_64)",
+        "cpu_info": "13th Gen Intel(R) Core(TM) i5-13450HX (8 cores / 16 threads visible to the OS)",
+        "ram_total_gb": 11.54,
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "gpu_vram_total_gb": 6.0,
+        "gpu_compute_capability": "8.9",
+        "nvidia_driver_version": "581.86",
+        "cuda_runtime_version": "12.1",
+        "cudnn_version": "9.10.2",
+        "tensorrt_version": "NOT_INSTALLED",
+        "onnx_version": "1.20.1",
+        "onnxruntime_version": "1.23.2 (providers: AzureExecutionProvider, CPUExecutionProvider)",
+        "torch_version": "2.5.1+cu121"
+      },
+      "model_path_latency_ms": {
+        "p50_ms": 3.902463912963867,
+        "p90_ms": 4.083814477920533,
+        "p95_ms": 4.1400830268859865,
+        "p99_ms": 4.491366267204285,
+        "mean_ms": 3.9490361811319987,
+        "std_ms": 0.13531632068085014,
+        "min_ms": 3.8502399921417236,
+        "max_ms": 5.8961920738220215,
+        "throughput_fps": 256.248365725569,
+        "p50_ci95_ms": [
+          3.9004158973693848,
+          3.9045119285583496
+        ],
+        "p95_ci95_ms": [
+          4.125838422775269,
+          4.154367923736572
+        ],
+        "samples": 1500
+      },
+      "end_to_end_latency_ms": {
+        "p50": 6.504524999999999,
+        "p90": 7.1380706,
+        "p95": 7.5700527,
+        "p99": 7.9064538099999995,
+        "mean": 6.61164946,
+        "std": 0.41254692891897576,
+        "throughput_fps": 153.73912776105868,
+        "iterations": 200,
+        "stages_p50": {
+          "preprocess": 1.3671834999999999,
+          "inference": 4.782256,
+          "postprocess": 0.3220765
+        },
+        "stages_mean": {
+          "preprocess": 1.3848823099999998,
+          "inference": 4.890933755,
+          "postprocess": 0.33583339500000003
+        }
+      },
+      "memory_utilization": {
+        "peak_vram_allocated_mb": 44.92,
+        "peak_vram_reserved_mb": 64.0,
+        "process_rss_mb": 1531.71,
+        "nvml_gpu_memory_used_mb": 386.59
+      },
+      "stability_audit": {
+        "session_p50_values": [
+          3.918336033821106,
+          3.8973441123962402,
+          3.9086079597473145,
+          3.89737606048584,
+          3.8978559970855713
+        ],
+        "session_p95_values": [
+          4.172902464866638,
+          4.084940671920776,
+          4.170143818855286,
+          4.057099103927612,
+          4.089139103889465
+        ],
+        "cv_p50": 0.0021511899227227497,
+        "cv_p50_mad_filtered": 6.007352214311249e-05,
+        "initial_cv_p50": 0.0021511899227227497,
+        "supplemental_sessions_run": false,
+        "stable": true,
+        "stability_warning": null,
+        "total_sessions": 5
+      },
+      "numerical_checks": {
+        "per_output": {
+          "reconstruction": {
+            "max_abs_error": 2.980232238769531e-07,
+            "mean_abs_error": 2.669882330034549e-08,
+            "max_rel_error": 4.1895141822596196e-07,
+            "rmse": 4.5186943705076384e-08,
+            "cosine_similarity": 0.9999999999999967,
+            "nan_count": 0,
+            "inf_count": 0
+          },
+          "anomaly_map": {
+            "max_abs_error": 1.7974525690078735e-07,
+            "mean_abs_error": 2.0342056483713122e-08,
+            "max_rel_error": 1.5618372307295505e-06,
+            "rmse": 2.8384486692320028e-08,
+            "cosine_similarity": 0.9999999999988844,
+            "nan_count": 0,
+            "inf_count": 0
+          }
+        },
+        "max_abs_error": 2.980232238769531e-07,
+        "mean_abs_error": 2.669882330034549e-08,
+        "max_rel_error": 1.5618372307295505e-06,
+        "cosine_similarity": 0.9999999999988844,
+        "nan_count": 0,
+        "inf_count": 0,
+        "thresholds": {
+          "max_rel_error": 0.0001,
+          "min_cosine_similarity": 0.99999
+        },
+        "passed": true
+      },
+      "quality_audit": {
+        "metric": "image_auroc",
+        "value": 0.9309,
+        "reference_value": 0.9309,
+        "delta": 0.0,
+        "max_allowed_drop": 0.001,
+        "all_metrics": {
+          "image_auroc": 0.9309,
+          "pixel_auroc": 0.6193,
+          "aupro": 0.8011
+        },
+        "reference_metrics": {
+          "image_auroc": 0.9309,
+          "pixel_auroc": 0.6193,
+          "aupro": 0.8011
+        },
+        "passed": true
+      }
+    },
+    {
+      "run_id": "yolo_nano_ORT_CPU_fp16_20261027_011728",
+      "session_id": "session_20261027T011458Z",
+      "timestamp": "2026-10-27T01:18:06.459490+00:00",
+      "status": "PASS",
+      "model_metadata": {
+        "model": "yolo_nano",
+        "task": "detection",
+        "precision": "fp16",
+        "batch_size": 1,
+        "input_shape": [
+          1,
+          3,
+          640,
+          640
+        ],
+        "model_size_mb": 3.7599,
+        "model_size_source": "serialized_file",
+        "model_file": "models/exported/yolo_nano_fp16.onnx",
+        "model_sha256": "69de28daf10ce7b9cbd9b3f71189020051947134bf670b86ef6c41ca3b080acd"
+      },
+      "runtime_metadata": {
+        "runtime": "ORT_CPU",
+        "provider": "CPUExecutionProvider"
+      },
+      "protocol": {
+        "warmup_iterations": 50,
+        "timed_iterations": 300,
+        "stability_sessions": 5,
+        "cooldown_seconds": 0.5,
+        "cv_threshold": 0.05,
+        "e2e_warmup_iterations": 20,
+        "e2e_timed_iterations": 200
+      },
+      "environment_manifest": {
+        "timestamp": "2026-10-27T01:14:58.872942+00:00",
+        "git_commit": "9878499-dirty",
+        "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+        "os_info": "Ubuntu 24.04.4 LTS | Linux 6.6.87.2-microsoft-standard-WSL2 (x86_64)",
+        "cpu_info": "13th Gen Intel(R) Core(TM) i5-13450HX (8 cores / 16 threads visible to the OS)",
+        "ram_total_gb": 11.54,
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "gpu_vram_total_gb": 6.0,
+        "gpu_compute_capability": "8.9",
+        "nvidia_driver_version": "581.86",
+        "cuda_runtime_version": "12.1",
+        "cudnn_version": "9.10.2",
+        "tensorrt_version": "NOT_INSTALLED",
+        "onnx_version": "1.20.1",
+        "onnxruntime_version": "1.23.2 (providers: AzureExecutionProvider, CPUExecutionProvider)",
+        "torch_version": "2.5.1+cu121"
+      },
+      "model_path_latency_ms": {
+        "p50_ms": 9.0774155,
+        "p90_ms": 11.9789431,
+        "p95_ms": 12.33426105,
+        "p99_ms": 13.38825495,
+        "mean_ms": 9.644456279333333,
+        "std_ms": 1.8340159931031088,
+        "min_ms": 8.33282,
+        "max_ms": 58.734092,
+        "throughput_fps": 110.16351515472658,
+        "p50_ci95_ms": [
+          9.0467713625,
+          9.1134345
+        ],
+        "p95_ci95_ms": [
+          12.248931,
+          12.511590720000001
+        ],
+        "samples": 1500
+      },
+      "end_to_end_latency_ms": {
+        "p50": 18.053971,
+        "p90": 22.6096701,
+        "p95": 23.630526749999998,
+        "p99": 27.391240029999995,
+        "mean": 18.45065777,
+        "std": 3.2839540135060243,
+        "throughput_fps": 55.38947636506118,
+        "iterations": 200,
+        "stages_p50": {
+          "preprocess": 3.083197,
+          "inference": 9.180278999999999,
+          "postprocess": 4.718788
+        },
+        "stages_mean": {
+          "preprocess": 3.184217625,
+          "inference": 10.023997165,
+          "postprocess": 5.242442980000001
+        }
+      },
+      "memory_utilization": {
+        "peak_vram_allocated_mb": 0.0,
+        "peak_vram_reserved_mb": 0.0,
+        "process_rss_mb": 1507.09,
+        "nvml_gpu_memory_used_mb": 0.0
+      },
+      "stability_audit": {
+        "session_p50_values": [
+          8.947634,
+          8.9704445,
+          9.056984,
+          9.262336000000001,
+          9.2558705
+        ],
+        "session_p95_values": [
+          11.99298395,
+          11.668337150000001,
+          12.3522667,
+          13.308637550000002,
+          12.1926418
+        ],
+        "cv_p50": 0.014948068626545501,
+        "cv_p50_mad_filtered": 0.014948068626545501,
+        "initial_cv_p50": 0.014948068626545501,
+        "supplemental_sessions_run": false,
+        "stable": true,
+        "stability_warning": null,
+        "total_sessions": 5
+      },
+      "numerical_checks": {
+        "per_output": {
+          "output0": {
+            "max_abs_error": 0.3877410888671875,
+            "mean_abs_error": 0.034729471447677095,
+            "max_rel_error": 0.000592477947910624,
+            "rmse": 0.05717921293958164,
+            "cosine_similarity": 0.999999965512981,
+            "nan_count": 0,
+            "inf_count": 0
+          }
+        },
+        "max_abs_error": 0.3877410888671875,
+        "mean_abs_error": 0.034729471447677095,
+        "max_rel_error": 0.000592477947910624,
+        "cosine_similarity": 0.999999965512981,
+        "nan_count": 0,
+        "inf_count": 0,
+        "thresholds": {
+          "max_rel_error": 0.005,
+          "min_cosine_similarity": 0.9999
+        },
+        "passed": true
+      },
+      "quality_audit": {
+        "metric": "mAP_50",
+        "value": 0.7008,
+        "reference_value": 0.7011,
+        "delta": -0.00029999999999996696,
+        "max_allowed_drop": 0.005,
+        "all_metrics": {
+          "mAP_50": 0.7008,
+          "mAP_50_95": 0.5006,
+          "precision": 0.0463,
+          "recall": 0.9605,
+          "f1": 0.0883
+        },
+        "reference_metrics": {
+          "mAP_50": 0.7011,
+          "mAP_50_95": 0.501,
+          "precision": 0.0464,
+          "recall": 0.962,
+          "f1": 0.0885
+        },
+        "passed": true
+      }
+    },
+    {
+      "run_id": "yolo_nano_ORT_CPU_fp32_20261027_011651",
+      "session_id": "session_20261027T011458Z",
+      "timestamp": "2026-10-27T01:17:28.600295+00:00",
+      "status": "PASS",
+      "model_metadata": {
+        "model": "yolo_nano",
+        "task": "detection",
+        "precision": "fp32",
+        "batch_size": 1,
+        "input_shape": [
+          1,
+          3,
+          640,
+          640
+        ],
+        "model_size_mb": 7.5005,
+        "model_size_source": "serialized_file",
+        "model_file": "models/exported/yolo_nano_fp32_opset17.onnx",
+        "model_sha256": "3c7b7c3dd152da2ddfcd03b38f2901c8ff53ef4a0af5bb55ccf9c59b090486d6"
+      },
+      "runtime_metadata": {
+        "runtime": "ORT_CPU",
+        "provider": "CPUExecutionProvider"
+      },
+      "protocol": {
+        "warmup_iterations": 50,
+        "timed_iterations": 300,
+        "stability_sessions": 5,
+        "cooldown_seconds": 0.5,
+        "cv_threshold": 0.05,
+        "e2e_warmup_iterations": 20,
+        "e2e_timed_iterations": 200
+      },
+      "environment_manifest": {
+        "timestamp": "2026-10-27T01:14:58.872942+00:00",
+        "git_commit": "9878499-dirty",
+        "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+        "os_info": "Ubuntu 24.04.4 LTS | Linux 6.6.87.2-microsoft-standard-WSL2 (x86_64)",
+        "cpu_info": "13th Gen Intel(R) Core(TM) i5-13450HX (8 cores / 16 threads visible to the OS)",
+        "ram_total_gb": 11.54,
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "gpu_vram_total_gb": 6.0,
+        "gpu_compute_capability": "8.9",
+        "nvidia_driver_version": "581.86",
+        "cuda_runtime_version": "12.1",
+        "cudnn_version": "9.10.2",
+        "tensorrt_version": "NOT_INSTALLED",
+        "onnx_version": "1.20.1",
+        "onnxruntime_version": "1.23.2 (providers: AzureExecutionProvider, CPUExecutionProvider)",
+        "torch_version": "2.5.1+cu121"
+      },
+      "model_path_latency_ms": {
+        "p50_ms": 8.9755345,
+        "p90_ms": 10.860953900000002,
+        "p95_ms": 11.85488665,
+        "p99_ms": 12.7146161,
+        "mean_ms": 9.289002417999999,
+        "std_ms": 0.9862708923048261,
+        "min_ms": 8.295053,
+        "max_ms": 14.167819,
+        "throughput_fps": 111.41397762996732,
+        "p50_ci95_ms": [
+          8.943025500000001,
+          9.008959
+        ],
+        "p95_ci95_ms": [
+          11.745693702499999,
+          11.980708252499998
+        ],
+        "samples": 1500
+      },
+      "end_to_end_latency_ms": {
+        "p50": 17.665381500000002,
+        "p90": 22.1854427,
+        "p95": 24.066954350000003,
+        "p99": 26.905369569999976,
+        "mean": 17.950967255000002,
+        "std": 3.5231349780521906,
+        "throughput_fps": 56.607891541996985,
+        "iterations": 200,
+        "stages_p50": {
+          "preprocess": 3.0800345,
+          "inference": 9.0030825,
+          "postprocess": 4.5946955
+        },
+        "stages_mean": {
+          "preprocess": 3.184310655,
+          "inference": 9.61959707,
+          "postprocess": 5.147059529999999
+        }
+      },
+      "memory_utilization": {
+        "peak_vram_allocated_mb": 0.0,
+        "peak_vram_reserved_mb": 0.0,
+        "process_rss_mb": 1498.93,
+        "nvml_gpu_memory_used_mb": 0.0
+      },
+      "stability_audit": {
+        "session_p50_values": [
+          8.855190499999999,
+          8.781796,
+          9.1198105,
+          9.1022655,
+          9.0971885
+        ],
+        "session_p95_values": [
+          11.7524566,
+          11.81413125,
+          12.1262533,
+          11.61364935,
+          11.7930209
+        ],
+        "cv_p50": 0.015920937825416034,
+        "cv_p50_mad_filtered": 0.001064268697889911,
+        "initial_cv_p50": 0.015920937825416034,
+        "supplemental_sessions_run": false,
+        "stable": true,
+        "stability_warning": null,
+        "total_sessions": 5
+      },
+      "numerical_checks": {
+        "per_output": {
+          "output0": {
+            "max_abs_error": 0.00035858154296875,
+            "mean_abs_error": 1.7375536766531507e-05,
+            "max_rel_error": 5.479214425209422e-07,
+            "rmse": 3.061461088250535e-05,
+            "cosine_similarity": 0.9999999999999908,
+            "nan_count": 0,
+            "inf_count": 0
+          }
+        },
+        "max_abs_error": 0.00035858154296875,
+        "mean_abs_error": 1.7375536766531507e-05,
+        "max_rel_error": 5.479214425209422e-07,
+        "cosine_similarity": 0.9999999999999908,
+        "nan_count": 0,
+        "inf_count": 0,
+        "thresholds": {
+          "max_rel_error": 0.0001,
+          "min_cosine_similarity": 0.99999
+        },
+        "passed": true
+      },
+      "quality_audit": {
+        "metric": "mAP_50",
+        "value": 0.7011,
+        "reference_value": 0.7011,
+        "delta": 0.0,
+        "max_allowed_drop": 0.001,
+        "all_metrics": {
+          "mAP_50": 0.7011,
+          "mAP_50_95": 0.501,
+          "precision": 0.0464,
+          "recall": 0.962,
+          "f1": 0.0885
+        },
+        "reference_metrics": {
+          "mAP_50": 0.7011,
+          "mAP_50_95": 0.501,
+          "precision": 0.0464,
+          "recall": 0.962,
+          "f1": 0.0885
+        },
+        "passed": true
+      }
+    },
+    {
+      "run_id": "yolo_nano_ORT_CPU_int8_20261027_011806",
+      "session_id": "session_20261027T011458Z",
+      "timestamp": "2026-10-27T01:18:37.427836+00:00",
+      "status": "NUMERICAL_GATE_FAIL",
+      "model_metadata": {
+        "model": "yolo_nano",
+        "task": "detection",
+        "precision": "int8",
+        "batch_size": 1,
+        "input_shape": [
+          1,
+          3,
+          640,
+          640
+        ],
+        "model_size_mb": 1.982,
+        "model_size_source": "serialized_file",
+        "model_file": "models/exported/yolo_nano_static_int8.onnx",
+        "model_sha256": "23f31392eddeb62adb1663cb492884468dfb8622c72d608615951c97777ceba2"
+      },
+      "runtime_metadata": {
+        "runtime": "ORT_CPU",
+        "provider": "CPUExecutionProvider"
+      },
+      "protocol": {
+        "warmup_iterations": 50,
+        "timed_iterations": 300,
+        "stability_sessions": 5,
+        "cooldown_seconds": 0.5,
+        "cv_threshold": 0.05,
+        "e2e_warmup_iterations": 20,
+        "e2e_timed_iterations": 200
+      },
+      "environment_manifest": {
+        "timestamp": "2026-10-27T01:14:58.872942+00:00",
+        "git_commit": "9878499-dirty",
+        "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+        "os_info": "Ubuntu 24.04.4 LTS | Linux 6.6.87.2-microsoft-standard-WSL2 (x86_64)",
+        "cpu_info": "13th Gen Intel(R) Core(TM) i5-13450HX (8 cores / 16 threads visible to the OS)",
+        "ram_total_gb": 11.54,
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "gpu_vram_total_gb": 6.0,
+        "gpu_compute_capability": "8.9",
+        "nvidia_driver_version": "581.86",
+        "cuda_runtime_version": "12.1",
+        "cudnn_version": "9.10.2",
+        "tensorrt_version": "NOT_INSTALLED",
+        "onnx_version": "1.20.1",
+        "onnxruntime_version": "1.23.2 (providers: AzureExecutionProvider, CPUExecutionProvider)",
+        "torch_version": "2.5.1+cu121"
+      },
+      "model_path_latency_ms": {
+        "p50_ms": 5.876365,
+        "p90_ms": 6.6774471,
+        "p95_ms": 6.998876699999999,
+        "p99_ms": 7.624106439999999,
+        "mean_ms": 5.973349541333334,
+        "std_ms": 0.5510238511788846,
+        "min_ms": 5.188451,
+        "max_ms": 9.735093,
+        "throughput_fps": 170.17322783727695,
+        "p50_ci95_ms": [
+          5.8470463625,
+          5.910525
+        ],
+        "p95_ci95_ms": [
+          6.897365167499999,
+          7.0695406499999995
+        ],
+        "samples": 1500
+      },
+      "end_to_end_latency_ms": {
+        "p50": 14.618687,
+        "p90": 18.460140999999997,
+        "p95": 19.83537615,
+        "p99": 20.985969929999996,
+        "mean": 14.945815539999998,
+        "std": 2.6177921299264306,
+        "throughput_fps": 68.40559620710123,
+        "iterations": 200,
+        "stages_p50": {
+          "preprocess": 3.0812625000000002,
+          "inference": 6.454625999999999,
+          "postprocess": 4.8243895000000006
+        },
+        "stages_mean": {
+          "preprocess": 3.192005275,
+          "inference": 6.51444171,
+          "postprocess": 5.2393685549999995
+        }
+      },
+      "memory_utilization": {
+        "peak_vram_allocated_mb": 0.0,
+        "peak_vram_reserved_mb": 0.0,
+        "process_rss_mb": 1525.26,
+        "nvml_gpu_memory_used_mb": 0.0
+      },
+      "stability_audit": {
+        "session_p50_values": [
+          5.922327,
+          5.805111500000001,
+          5.8906965,
+          5.931309499999999,
+          5.8750805
+        ],
+        "session_p95_values": [
+          7.0695406499999995,
+          6.87627475,
+          6.7128934,
+          7.304273150000001,
+          6.83468865
+        ],
+        "cv_p50": 0.007618630436094689,
+        "cv_p50_mad_filtered": 0.007618630436094689,
+        "initial_cv_p50": 0.007618630436094689,
+        "supplemental_sessions_run": false,
+        "stable": true,
+        "stability_warning": null,
+        "total_sessions": 5
+      },
+      "numerical_checks": {
+        "per_output": {
+          "output0": {
+            "max_abs_error": 132.33729553222656,
+            "mean_abs_error": 4.50321927883453,
+            "max_rel_error": 0.2022146518390575,
+            "rmse": 8.405560721452376,
+            "cosine_similarity": 0.9992545403444759,
+            "nan_count": 0,
+            "inf_count": 0
+          }
+        },
+        "max_abs_error": 132.33729553222656,
+        "mean_abs_error": 4.50321927883453,
+        "max_rel_error": 0.2022146518390575,
+        "cosine_similarity": 0.9992545403444759,
+        "nan_count": 0,
+        "inf_count": 0,
+        "thresholds": {
+          "max_rel_error": 0.1,
+          "min_cosine_similarity": 0.99
+        },
+        "passed": false
+      },
+      "quality_audit": {
+        "metric": "mAP_50",
+        "value": 0.7774,
+        "reference_value": 0.7011,
+        "delta": 0.07630000000000003,
+        "max_allowed_drop": 0.02,
+        "all_metrics": {
+          "mAP_50": 0.7774,
+          "mAP_50_95": 0.5475,
+          "precision": 0.0444,
+          "recall": 0.9737,
+          "f1": 0.0849
+        },
+        "reference_metrics": {
+          "mAP_50": 0.7011,
+          "mAP_50_95": 0.501,
+          "precision": 0.0464,
+          "recall": 0.962,
+          "f1": 0.0885
+        },
+        "passed": true
+      }
+    },
+    {
+      "run_id": "yolo_nano_PyTorch_fp16_20261027_011629",
+      "session_id": "session_20261027T011458Z",
+      "timestamp": "2026-10-27T01:16:51.498862+00:00",
+      "status": "PASS",
+      "model_metadata": {
+        "model": "yolo_nano",
+        "task": "detection",
+        "precision": "fp16",
+        "batch_size": 1,
+        "input_shape": [
+          1,
+          3,
+          640,
+          640
+        ],
+        "model_size_mb": 3.7169,
+        "model_size_source": "parameters_and_buffers",
+        "model_file": null,
+        "model_sha256": null
+      },
+      "runtime_metadata": {
+        "runtime": "PyTorch",
+        "provider": "PyTorch_CUDA:0"
+      },
+      "protocol": {
+        "warmup_iterations": 50,
+        "timed_iterations": 300,
+        "stability_sessions": 5,
+        "cooldown_seconds": 0.5,
+        "cv_threshold": 0.05,
+        "e2e_warmup_iterations": 20,
+        "e2e_timed_iterations": 200
+      },
+      "environment_manifest": {
+        "timestamp": "2026-10-27T01:14:58.872942+00:00",
+        "git_commit": "9878499-dirty",
+        "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+        "os_info": "Ubuntu 24.04.4 LTS | Linux 6.6.87.2-microsoft-standard-WSL2 (x86_64)",
+        "cpu_info": "13th Gen Intel(R) Core(TM) i5-13450HX (8 cores / 16 threads visible to the OS)",
+        "ram_total_gb": 11.54,
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "gpu_vram_total_gb": 6.0,
+        "gpu_compute_capability": "8.9",
+        "nvidia_driver_version": "581.86",
+        "cuda_runtime_version": "12.1",
+        "cudnn_version": "9.10.2",
+        "tensorrt_version": "NOT_INSTALLED",
+        "onnx_version": "1.20.1",
+        "onnxruntime_version": "1.23.2 (providers: AzureExecutionProvider, CPUExecutionProvider)",
+        "torch_version": "2.5.1+cu121"
+      },
+      "model_path_latency_ms": {
+        "p50_ms": 1.888047993183136,
+        "p90_ms": 2.43604154586792,
+        "p95_ms": 4.568166613578796,
+        "p99_ms": 5.123988065719605,
+        "mean_ms": 2.1204315516153973,
+        "std_ms": 0.7583550121687025,
+        "min_ms": 1.04038405418396,
+        "max_ms": 6.512639999389648,
+        "throughput_fps": 529.6475532457519,
+        "p50_ci95_ms": [
+          1.8823515951633454,
+          1.8923519849777222
+        ],
+        "p95_ci95_ms": [
+          4.274115180969237,
+          4.721985554695129
+        ],
+        "samples": 1500
+      },
+      "end_to_end_latency_ms": {
+        "p50": 10.1497245,
+        "p90": 13.6715398,
+        "p95": 14.404378149999998,
+        "p99": 17.659620869999987,
+        "mean": 10.476936335,
+        "std": 2.448833335129166,
+        "throughput_fps": 98.52484173338891,
+        "iterations": 200,
+        "stages_p50": {
+          "preprocess": 2.6709755,
+          "inference": 3.475287,
+          "postprocess": 3.670594
+        },
+        "stages_mean": {
+          "preprocess": 2.830896605,
+          "inference": 3.68797099,
+          "postprocess": 3.95806874
+        }
+      },
+      "memory_utilization": {
+        "peak_vram_allocated_mb": 17.27,
+        "peak_vram_reserved_mb": 26.0,
+        "process_rss_mb": 1453.74,
+        "nvml_gpu_memory_used_mb": 346.59
+      },
+      "stability_audit": {
+        "session_p50_values": [
+          1.8698240518569946,
+          1.9041279554367065,
+          1.866159975528717,
+          1.8789119720458984,
+          1.9317440390586853
+        ],
+        "session_p95_values": [
+          4.713235116004944,
+          4.766401505470276,
+          4.5464160442352295,
+          2.199766337871552,
+          2.94091353416443
+        ],
+        "cv_p50": 0.013046189690959125,
+        "cv_p50_mad_filtered": 0.013046189690959125,
+        "initial_cv_p50": 0.013046189690959125,
+        "supplemental_sessions_run": false,
+        "stable": true,
+        "stability_warning": null,
+        "total_sessions": 5
+      },
+      "numerical_checks": {
+        "per_output": {
+          "output0": {
+            "max_abs_error": 1.385162353515625,
+            "mean_abs_error": 0.10199939079739298,
+            "max_rel_error": 0.0021165622429432382,
+            "rmse": 0.16543472499953632,
+            "cosine_similarity": 0.9999997119149877,
+            "nan_count": 0,
+            "inf_count": 0
+          }
+        },
+        "max_abs_error": 1.385162353515625,
+        "mean_abs_error": 0.10199939079739298,
+        "max_rel_error": 0.0021165622429432382,
+        "cosine_similarity": 0.9999997119149877,
+        "nan_count": 0,
+        "inf_count": 0,
+        "thresholds": {
+          "max_rel_error": 0.005,
+          "min_cosine_similarity": 0.9999
+        },
+        "passed": true
+      },
+      "quality_audit": {
+        "metric": "mAP_50",
+        "value": 0.7046,
+        "reference_value": 0.7011,
+        "delta": 0.0035000000000000586,
+        "max_allowed_drop": 0.005,
+        "all_metrics": {
+          "mAP_50": 0.7046,
+          "mAP_50_95": 0.5016,
+          "precision": 0.0463,
+          "recall": 0.9591,
+          "f1": 0.0883
+        },
+        "reference_metrics": {
+          "mAP_50": 0.7011,
+          "mAP_50_95": 0.501,
+          "precision": 0.0464,
+          "recall": 0.962,
+          "f1": 0.0885
+        },
+        "passed": true
+      }
+    },
+    {
+      "run_id": "yolo_nano_PyTorch_fp32_20261027_011514",
+      "session_id": "session_20261027T011458Z",
+      "timestamp": "2026-10-27T01:16:03.354054+00:00",
+      "status": "PASS",
+      "model_metadata": {
+        "model": "yolo_nano",
+        "task": "detection",
+        "precision": "fp32",
+        "batch_size": 1,
+        "input_shape": [
+          1,
+          3,
+          640,
+          640
+        ],
+        "model_size_mb": 7.4337,
+        "model_size_source": "parameters_and_buffers",
+        "model_file": null,
+        "model_sha256": null
+      },
+      "runtime_metadata": {
+        "runtime": "PyTorch",
+        "provider": "PyTorch_CPU"
+      },
+      "protocol": {
+        "warmup_iterations": 50,
+        "timed_iterations": 300,
+        "stability_sessions": 5,
+        "cooldown_seconds": 0.5,
+        "cv_threshold": 0.05,
+        "e2e_warmup_iterations": 20,
+        "e2e_timed_iterations": 200
+      },
+      "environment_manifest": {
+        "timestamp": "2026-10-27T01:14:58.872942+00:00",
+        "git_commit": "9878499-dirty",
+        "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+        "os_info": "Ubuntu 24.04.4 LTS | Linux 6.6.87.2-microsoft-standard-WSL2 (x86_64)",
+        "cpu_info": "13th Gen Intel(R) Core(TM) i5-13450HX (8 cores / 16 threads visible to the OS)",
+        "ram_total_gb": 11.54,
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "gpu_vram_total_gb": 6.0,
+        "gpu_compute_capability": "8.9",
+        "nvidia_driver_version": "581.86",
+        "cuda_runtime_version": "12.1",
+        "cudnn_version": "9.10.2",
+        "tensorrt_version": "NOT_INSTALLED",
+        "onnx_version": "1.20.1",
+        "onnxruntime_version": "1.23.2 (providers: AzureExecutionProvider, CPUExecutionProvider)",
+        "torch_version": "2.5.1+cu121"
+      },
+      "model_path_latency_ms": {
+        "p50_ms": 13.983493500000002,
+        "p90_ms": 17.370360500000004,
+        "p95_ms": 18.087527700000003,
+        "p99_ms": 19.79668765,
+        "mean_ms": 14.595916815333336,
+        "std_ms": 1.6167579769429143,
+        "min_ms": 12.309553,
+        "max_ms": 21.416064,
+        "throughput_fps": 71.51288767717452,
+        "p50_ci95_ms": [
+          13.9481365375,
+          14.050446
+        ],
+        "p95_ci95_ms": [
+          17.832020249999996,
+          18.278835949999998
+        ],
+        "samples": 1500
+      },
+      "end_to_end_latency_ms": {
+        "p50": 20.6016035,
+        "p90": 26.0715236,
+        "p95": 28.594211299999984,
+        "p99": 36.14265173999983,
+        "mean": 21.783391190000003,
+        "std": 5.77744754678866,
+        "throughput_fps": 48.53991098314265,
+        "iterations": 200,
+        "stages_p50": {
+          "preprocess": 3.0395820000000002,
+          "inference": 12.503731,
+          "postprocess": 4.3915765
+        },
+        "stages_mean": {
+          "preprocess": 3.2091030250000006,
+          "inference": 13.742515444999999,
+          "postprocess": 4.83177272
+        }
+      },
+      "memory_utilization": {
+        "peak_vram_allocated_mb": 0.0,
+        "peak_vram_reserved_mb": 0.0,
+        "process_rss_mb": 881.18,
+        "nvml_gpu_memory_used_mb": 0.0
+      },
+      "stability_audit": {
+        "session_p50_values": [
+          13.865444,
+          13.955103999999999,
+          13.890249,
+          13.841954999999999,
+          14.2750575
+        ],
+        "session_p95_values": [
+          18.085157,
+          18.076960500000002,
+          17.936123650000003,
+          17.44703875,
+          18.5706811
+        ],
+        "cv_p50": 0.011406123895439746,
+        "cv_p50_mad_filtered": 0.003041413922616327,
+        "initial_cv_p50": 0.011406123895439746,
+        "supplemental_sessions_run": false,
+        "stable": true,
+        "stability_warning": null,
+        "total_sessions": 5
+      },
+      "numerical_checks": {
+        "per_output": {
+          "output0": {
+            "max_abs_error": 0.0,
+            "mean_abs_error": 0.0,
+            "max_rel_error": 0.0,
+            "rmse": 0.0,
+            "cosine_similarity": 1.0,
+            "nan_count": 0,
+            "inf_count": 0
+          }
+        },
+        "max_abs_error": 0.0,
+        "mean_abs_error": 0.0,
+        "max_rel_error": 0.0,
+        "cosine_similarity": 1.0,
+        "nan_count": 0,
+        "inf_count": 0,
+        "thresholds": {
+          "max_rel_error": 0.0001,
+          "min_cosine_similarity": 0.99999
+        },
+        "passed": true
+      },
+      "quality_audit": {
+        "metric": "mAP_50",
+        "value": 0.7011,
+        "reference_value": 0.7011,
+        "delta": 0.0,
+        "max_allowed_drop": 0.001,
+        "all_metrics": {
+          "mAP_50": 0.7011,
+          "mAP_50_95": 0.501,
+          "precision": 0.0464,
+          "recall": 0.962,
+          "f1": 0.0885
+        },
+        "reference_metrics": {
+          "mAP_50": 0.7011,
+          "mAP_50_95": 0.501,
+          "precision": 0.0464,
+          "recall": 0.962,
+          "f1": 0.0885
+        },
+        "passed": true
+      }
+    },
+    {
+      "run_id": "yolo_nano_PyTorch_fp32_20261027_011603",
+      "session_id": "session_20261027T011458Z",
+      "timestamp": "2026-10-27T01:16:29.251450+00:00",
+      "status": "UNSTABLE_LATENCY",
+      "model_metadata": {
+        "model": "yolo_nano",
+        "task": "detection",
+        "precision": "fp32",
+        "batch_size": 1,
+        "input_shape": [
+          1,
+          3,
+          640,
+          640
+        ],
+        "model_size_mb": 7.4337,
+        "model_size_source": "parameters_and_buffers",
+        "model_file": null,
+        "model_sha256": null
+      },
+      "runtime_metadata": {
+        "runtime": "PyTorch",
+        "provider": "PyTorch_CUDA:0"
+      },
+      "protocol": {
+        "warmup_iterations": 50,
+        "timed_iterations": 300,
+        "stability_sessions": 5,
+        "cooldown_seconds": 0.5,
+        "cv_threshold": 0.05,
+        "e2e_warmup_iterations": 20,
+        "e2e_timed_iterations": 200
+      },
+      "environment_manifest": {
+        "timestamp": "2026-10-27T01:14:58.872942+00:00",
+        "git_commit": "9878499-dirty",
+        "python_version": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:16:10) [GCC 11.2.0]",
+        "os_info": "Ubuntu 24.04.4 LTS | Linux 6.6.87.2-microsoft-standard-WSL2 (x86_64)",
+        "cpu_info": "13th Gen Intel(R) Core(TM) i5-13450HX (8 cores / 16 threads visible to the OS)",
+        "ram_total_gb": 11.54,
+        "gpu_available": true,
+        "gpu_name": "NVIDIA GeForce RTX 4050 Laptop GPU",
+        "gpu_vram_total_gb": 6.0,
+        "gpu_compute_capability": "8.9",
+        "nvidia_driver_version": "581.86",
+        "cuda_runtime_version": "12.1",
+        "cudnn_version": "9.10.2",
+        "tensorrt_version": "NOT_INSTALLED",
+        "onnx_version": "1.20.1",
+        "onnxruntime_version": "1.23.2 (providers: AzureExecutionProvider, CPUExecutionProvider)",
+        "torch_version": "2.5.1+cu121"
+      },
+      "model_path_latency_ms": {
+        "p50_ms": 1.6066559553146362,
+        "p90_ms": 2.1637120246887207,
+        "p95_ms": 3.593727898597717,
+        "p99_ms": 4.258209338188167,
+        "mean_ms": 1.7729909036840712,
+        "std_ms": 0.6002351895778678,
+        "min_ms": 1.2390400171279907,
+        "max_ms": 8.555520057678223,
+        "throughput_fps": 622.4107885027364,
+        "p50_ci95_ms": [
+          1.5974400043487549,
+          1.615363222360611
+        ],
+        "p95_ci95_ms": [
+          2.6666012659668903,
+          3.7021119594573975
+        ],
+        "samples": 2100
+      },
+      "end_to_end_latency_ms": {
+        "p50": 10.214194500000001,
+        "p90": 13.357283,
+        "p95": 15.046016799999999,
+        "p99": 18.12814143999999,
+        "mean": 10.411167045,
+        "std": 2.6462681146959324,
+        "throughput_fps": 97.90297218248584,
+        "iterations": 200,
+        "stages_p50": {
+          "preprocess": 2.8082325,
+          "inference": 3.1986850000000002,
+          "postprocess": 3.8126545
+        },
+        "stages_mean": {
+          "preprocess": 2.836991655,
+          "inference": 3.4690989500000002,
+          "postprocess": 4.10507644
+        }
+      },
+      "memory_utilization": {
+        "peak_vram_allocated_mb": 35.33,
+        "peak_vram_reserved_mb": 46.0,
+        "process_rss_mb": 1152.76,
+        "nvml_gpu_memory_used_mb": 360.59
+      },
+      "stability_audit": {
+        "session_p50_values": [
+          1.6163359880447388,
+          1.5580160021781921,
+          1.5740639567375183,
+          1.8204960227012634,
+          1.5769599676132202,
+          1.592799961566925,
+          1.639952003955841
+        ],
+        "session_p95_values": [
+          3.46638231277466,
+          2.115614461898804,
+          3.559481489658357,
+          2.253055989742279,
+          4.10790388584137,
+          2.0728320479393005,
+          4.120084977149964
+        ],
+        "cv_p50": 0.05143962356616302,
+        "cv_p50_mad_filtered": 0.017360167232839705,
+        "initial_cv_p50": 0.059886895705083425,
+        "supplemental_sessions_run": true,
+        "stable": false,
+        "stability_warning": "Session-median CV=0.0514 exceeds 0.05 across 7 sessions",
+        "total_sessions": 7
+      },
+      "numerical_checks": {
+        "per_output": {
+          "output0": {
+            "max_abs_error": 0.000274658203125,
+            "mean_abs_error": 1.6315107890737376e-05,
+            "max_rel_error": 4.1968450916497704e-07,
+            "rmse": 3.090860217890204e-05,
+            "cosine_similarity": 0.999999999999991,
+            "nan_count": 0,
+            "inf_count": 0
+          }
+        },
+        "max_abs_error": 0.000274658203125,
+        "mean_abs_error": 1.6315107890737376e-05,
+        "max_rel_error": 4.1968450916497704e-07,
+        "cosine_similarity": 0.999999999999991,
+        "nan_count": 0,
+        "inf_count": 0,
+        "thresholds": {
+          "max_rel_error": 0.0001,
+          "min_cosine_similarity": 0.99999
+        },
+        "passed": true
+      },
+      "quality_audit": {
+        "metric": "mAP_50",
+        "value": 0.7011,
+        "reference_value": 0.7011,
+        "delta": 0.0,
+        "max_allowed_drop": 0.001,
+        "all_metrics": {
+          "mAP_50": 0.7011,
+          "mAP_50_95": 0.501,
+          "precision": 0.0464,
+          "recall": 0.962,
+          "f1": 0.0885
+        },
+        "reference_metrics": {
+          "mAP_50": 0.7011,
+          "mAP_50_95": 0.501,
+          "precision": 0.0464,
+          "recall": 0.962,
+          "f1": 0.0885
+        },
+        "passed": true
+      }
+    }
+  ]
+}

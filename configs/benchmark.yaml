@@ -1,11 +1,14 @@
+# Benchmark protocol consumed by scripts/benchmark_all.py
 benchmark:
   batch_size: 1
-  warmup_iterations: 50
-  timed_iterations: 300
-  stability_sessions: 3
-  cooldown_seconds: 2.0
+  warmup_iterations: 50          # untimed model-path iterations per session
+  timed_iterations: 300          # timed model-path iterations per session
+  stability_sessions: 5          # + 2 supplemental sessions if the session-median CV exceeds 0.04
+  cooldown_seconds: 0.5
+  e2e_warmup_iterations: 20
+  e2e_timed_iterations: 200      # cycles through the 200-image test split
+  cv_threshold: 0.05             # stability verdict: CV of session medians <= 0.05
   device_id: 0
-  collect_nvml: true
 
 paths:
   weights_dir: "models/weights"

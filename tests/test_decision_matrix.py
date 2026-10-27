@@ -1,64 +1,28 @@
-"""
-Unit tests validating Deployment Decision Matrix synthesis.
-"""
+"""Tests for the data-driven deployment decision matrix."""
 
 from pathlib import Path
 import pandas as pd
-import pytest
 
+from src.analysis.aggregate_results import aggregate_benchmark_runs
 from src.analysis.decision_matrix import synthesize_decision_matrix
 
 
 class TestDecisionMatrix:
-    """Test suite validating deployment recommendations logic."""
+    def test_matrix_uses_only_gated_configurations(self, fake_session, tmp_path: Path) -> None:
+        raw, sid, _ = fake_session
+        df = aggregate_benchmark_runs(raw)
+        out = tmp_path / "matrix.md"
+        md = synthesize_decision_matrix(df, out)
+        assert out.is_file() and sid in md
+        # The numerically failing autoencoder INT8 run is excluded from recommendations and listed as rejected
+        rec_lines = [l for l in md.splitlines() if l.startswith("| D.") and "industrial_autoencoder" in l]
+        assert rec_lines and "INT8" not in rec_lines[0]
+        assert "numerical gate FAIL" in md
+        # Scenario A picks the minimum E2E latency detector config and states the budget verdict
+        assert "PyTorch (PyTorch_CUDA:0) FP32" in [l for l in md.splitlines() if l.startswith("| A.")][0]
+        assert "meets a 10 ms budget" in md
+        # No unmeasured marketing claims
+        assert "10-30x" not in md and "TensorRT and ORT CUDA deliver" not in md
 
-    def test_synthesize_decision_matrix(self, tmp_path: Path) -> None:
-        """Verifies Markdown table structure and scenario recommendations."""
-        df = pd.DataFrame([
-            {
-                "model": "yolo_nano",
-                "runtime": "ORT_CUDA",
-                "provider": "CUDAExecutionProvider",
-                "precision": "fp16",
-                "p50_model_ms": 2.0,
-                "p50_e2e_ms": 4.5,
-                "model_throughput_fps": 500.0,
-                "quality_value": 0.35,
-                "quality_delta": -0.001,
-                "peak_vram_mb": 120.0,
-            },
-            {
-                "model": "yolo_nano",
-                "runtime": "ORT_CPU",
-                "provider": "CPUExecutionProvider",
-                "precision": "int8",
-                "p50_model_ms": 6.0,
-                "p50_e2e_ms": 10.5,
-                "model_throughput_fps": 160.0,
-                "quality_value": 0.345,
-                "quality_delta": -0.005,
-                "peak_vram_mb": 0.0,
-            },
-            {
-                "model": "industrial_autoencoder",
-                "runtime": "PyTorch",
-                "provider": "PyTorch_CPU",
-                "precision": "fp32",
-                "p50_model_ms": 15.0,
-                "p50_e2e_ms": 18.0,
-                "model_throughput_fps": 66.0,
-                "quality_value": 0.995,
-                "quality_delta": 0.0,
-                "peak_vram_mb": 0.0,
-            }
-        ])
-
-        out_path = tmp_path / "deployment_decision_matrix.md"
-        doc = synthesize_decision_matrix(df, out_path)
-
-        assert out_path.is_file()
-        assert "Scenario A: Low-Latency Target" in doc
-        assert "Scenario B: Edge Gateway / IPC" in doc
-        assert "Scenario C: High-Fidelity Anomaly Inspection" in doc
-        assert "Scenario D: High-Throughput Offline Batch" in doc
-        assert "ORT_CUDA" in doc
+    def test_empty_dataframe(self) -> None:
+        assert "No benchmark data" in synthesize_decision_matrix(pd.DataFrame())

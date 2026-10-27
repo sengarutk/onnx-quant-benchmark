@@ -31,7 +31,7 @@ class TestRuntimesCUDA:
 
         assert "output0" in out_dev
         assert out_dev["output0"].is_cuda
-        assert out_dev["output0"].shape == (1, 84, 8400)
+        assert out_dev["output0"].shape == (1, 6, 8400)
 
         # Test predict with host array
         host_arr = np.random.randn(1, 3, 640, 640).astype(np.float32)
@@ -63,6 +63,7 @@ class TestRuntimesCUDA:
             assert "output0" in dev_out
             runtime.cleanup()
 
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="device buffers require CUDA")
     def test_ort_cuda_runtime_mocked_iobinding_execution(self, tmp_path: Path) -> None:
         """Tests ORTCUDARuntime IOBinding and zero-copy dispatch using mocked ORT session."""
         dummy_onnx = tmp_path / "dummy.onnx"

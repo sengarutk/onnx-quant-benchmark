@@ -1,0 +1,474 @@
+{
+  "calibration_images": 100,
+  "test_images": 200,
+  "test_boxes": 684,
+  "grid": "conf 0.10..0.95 x IoU 0.05..0.70, step 0.05 (252 points)",
+  "ablation": [
+    {
+      "config": "PyTorch FP32 (CPU)",
+      "precision": "fp32",
+      "runtime": "PyTorch_CPU",
+      "calibration": {
+        "precision": "fp32",
+        "runtime": "PyTorch_CPU",
+        "baseline_conf": 0.25,
+        "baseline_iou": 0.45,
+        "baseline_f1": 0.0994,
+        "optimal_conf": 0.8,
+        "optimal_iou": 0.05,
+        "optimal_f1": 0.7156,
+        "f1_delta": 0.6162,
+        "grid_evaluated": 252,
+        "grid_skipped_latency": 0,
+        "calib_samples": 100,
+        "search_seconds": 77.485,
+        "optimum_on_grid_boundary": true
+      },
+      "default": {
+        "conf": 0.25,
+        "iou": 0.45,
+        "f1": 0.08850628825072299,
+        "tp": 658,
+        "fp": 13527,
+        "fn": 26,
+        "mAP_50": 0.7011,
+        "postprocess_ms": 3.73990805500398
+      },
+      "calibrated": {
+        "conf": 0.8,
+        "iou": 0.05,
+        "f1": 0.7123674911660778,
+        "tp": 504,
+        "fp": 227,
+        "fn": 180,
+        "mAP_50": 0.7155,
+        "postprocess_ms": 0.4079316700062918
+      },
+      "fp32_transfer": {
+        "conf": 0.8,
+        "iou": 0.05,
+        "f1": 0.7123674911660778,
+        "tp": 504,
+        "fp": 227,
+        "fn": 180
+      },
+      "delta_f1": 0.6238612029153547,
+      "delta_f1_ci95": [
+        0.5856687225257634,
+        0.6603044469860341
+      ],
+      "wilcoxon_errors": {
+        "statistic": 2.5,
+        "p_value": 3.1647897247093714e-34,
+        "significant_05": true,
+        "mean_diff": 65.73,
+        "median_diff": 63.5,
+        "n_pairs": 200,
+        "p_holm": 9.488233994620725e-34,
+        "reject_holm_05": true
+      },
+      "delta_f1_vs_transfer": 0.0,
+      "delta_f1_vs_transfer_ci95": [
+        0.0,
+        0.0
+      ],
+      "wilcoxon_vs_transfer": {
+        "statistic": 0.0,
+        "p_value": 1.0,
+        "significant_05": false,
+        "mean_diff": 0.0,
+        "median_diff": 0.0,
+        "n_pairs": 200,
+        "p_holm": 1.0,
+        "reject_holm_05": false
+      }
+    },
+    {
+      "config": "ORT FP32 (CPU)",
+      "precision": "fp32",
+      "runtime": "ORT_CPU",
+      "calibration": {
+        "precision": "fp32",
+        "runtime": "ORT_CPU",
+        "baseline_conf": 0.25,
+        "baseline_iou": 0.45,
+        "baseline_f1": 0.0994,
+        "optimal_conf": 0.8,
+        "optimal_iou": 0.05,
+        "optimal_f1": 0.7156,
+        "f1_delta": 0.6162,
+        "grid_evaluated": 252,
+        "grid_skipped_latency": 0,
+        "calib_samples": 100,
+        "search_seconds": 77.161,
+        "optimum_on_grid_boundary": true
+      },
+      "default": {
+        "conf": 0.25,
+        "iou": 0.45,
+        "f1": 0.08850628825072299,
+        "tp": 658,
+        "fp": 13527,
+        "fn": 26,
+        "mAP_50": 0.7011,
+        "postprocess_ms": 3.9312970199989645
+      },
+      "calibrated": {
+        "conf": 0.8,
+        "iou": 0.05,
+        "f1": 0.7123674911660778,
+        "tp": 504,
+        "fp": 227,
+        "fn": 180,
+        "mAP_50": 0.7155,
+        "postprocess_ms": 0.40201810000326077
+      },
+      "fp32_transfer": {
+        "conf": 0.8,
+        "iou": 0.05,
+        "f1": 0.7123674911660778,
+        "tp": 504,
+        "fp": 227,
+        "fn": 180
+      },
+      "delta_f1": 0.6238612029153547,
+      "delta_f1_ci95": [
+        0.5856687225257634,
+        0.6603044469860341
+      ],
+      "wilcoxon_errors": {
+        "statistic": 2.5,
+        "p_value": 3.1647897247093714e-34,
+        "significant_05": true,
+        "mean_diff": 65.73,
+        "median_diff": 63.5,
+        "n_pairs": 200,
+        "p_holm": 9.488233994620725e-34,
+        "reject_holm_05": true
+      },
+      "delta_f1_vs_transfer": 0.0,
+      "delta_f1_vs_transfer_ci95": [
+        0.0,
+        0.0
+      ],
+      "wilcoxon_vs_transfer": {
+        "statistic": 0.0,
+        "p_value": 1.0,
+        "significant_05": false,
+        "mean_diff": 0.0,
+        "median_diff": 0.0,
+        "n_pairs": 200,
+        "p_holm": 1.0,
+        "reject_holm_05": false
+      }
+    },
+    {
+      "config": "ORT FP16 (CPU)",
+      "precision": "fp16",
+      "runtime": "ORT_CPU",
+      "calibration": {
+        "precision": "fp16",
+        "runtime": "ORT_CPU",
+        "baseline_conf": 0.25,
+        "baseline_iou": 0.45,
+        "baseline_f1": 0.0994,
+        "optimal_conf": 0.8,
+        "optimal_iou": 0.05,
+        "optimal_f1": 0.7156,
+        "f1_delta": 0.6162,
+        "grid_evaluated": 252,
+        "grid_skipped_latency": 0,
+        "calib_samples": 100,
+        "search_seconds": 77.633,
+        "optimum_on_grid_boundary": true
+      },
+      "default": {
+        "conf": 0.25,
+        "iou": 0.45,
+        "f1": 0.08832425892316999,
+        "tp": 657,
+        "fp": 13536,
+        "fn": 27,
+        "mAP_50": 0.7008,
+        "postprocess_ms": 3.6561954749959114
+      },
+      "calibrated": {
+        "conf": 0.8,
+        "iou": 0.05,
+        "f1": 0.7123674911660778,
+        "tp": 504,
+        "fp": 227,
+        "fn": 180,
+        "mAP_50": 0.7155,
+        "postprocess_ms": 0.4305430200020055
+      },
+      "fp32_transfer": {
+        "conf": 0.8,
+        "iou": 0.05,
+        "f1": 0.7123674911660778,
+        "tp": 504,
+        "fp": 227,
+        "fn": 180
+      },
+      "delta_f1": 0.6240432322429078,
+      "delta_f1_ci95": [
+        0.5857204621960854,
+        0.6603959607875469
+      ],
+      "wilcoxon_errors": {
+        "statistic": 2.5,
+        "p_value": 3.162744664873575e-34,
+        "significant_05": true,
+        "mean_diff": 65.78,
+        "median_diff": 63.0,
+        "n_pairs": 200,
+        "p_holm": 9.488233994620725e-34,
+        "reject_holm_05": true
+      },
+      "delta_f1_vs_transfer": 0.0,
+      "delta_f1_vs_transfer_ci95": [
+        0.0,
+        0.0
+      ],
+      "wilcoxon_vs_transfer": {
+        "statistic": 0.0,
+        "p_value": 1.0,
+        "significant_05": false,
+        "mean_diff": 0.0,
+        "median_diff": 0.0,
+        "n_pairs": 200,
+        "p_holm": 1.0,
+        "reject_holm_05": false
+      }
+    },
+    {
+      "config": "ORT INT8 (CPU)",
+      "precision": "int8",
+      "runtime": "ORT_CPU",
+      "calibration": {
+        "precision": "int8",
+        "runtime": "ORT_CPU",
+        "baseline_conf": 0.25,
+        "baseline_iou": 0.45,
+        "baseline_f1": 0.0958,
+        "optimal_conf": 0.75,
+        "optimal_iou": 0.1,
+        "optimal_f1": 0.7692,
+        "f1_delta": 0.6735,
+        "grid_evaluated": 252,
+        "grid_skipped_latency": 0,
+        "calib_samples": 100,
+        "search_seconds": 84.109,
+        "optimum_on_grid_boundary": false
+      },
+      "default": {
+        "conf": 0.25,
+        "iou": 0.45,
+        "f1": 0.08493814564468818,
+        "tp": 666,
+        "fp": 14332,
+        "fn": 18,
+        "mAP_50": 0.7774,
+        "postprocess_ms": 3.749740125003882
+      },
+      "calibrated": {
+        "conf": 0.75,
+        "iou": 0.1,
+        "f1": 0.7853025936599424,
+        "tp": 545,
+        "fp": 159,
+        "fn": 139,
+        "mAP_50": 0.8065,
+        "postprocess_ms": 0.49018575999980385
+      },
+      "fp32_transfer": {
+        "conf": 0.8,
+        "iou": 0.05,
+        "f1": 0.7936507936507936,
+        "tp": 500,
+        "fp": 76,
+        "fn": 184
+      },
+      "delta_f1": 0.7003644480152542,
+      "delta_f1_ci95": [
+        0.6647114722558989,
+        0.7344006840794594
+      ],
+      "wilcoxon_errors": {
+        "statistic": 0.0,
+        "p_value": 2.087281615065549e-34,
+        "significant_05": true,
+        "mean_diff": 70.26,
+        "median_diff": 66.5,
+        "n_pairs": 200,
+        "p_holm": 8.349126460262196e-34,
+        "reject_holm_05": true
+      },
+      "delta_f1_vs_transfer": -0.008348199990851235,
+      "delta_f1_vs_transfer_ci95": [
+        -0.029213156613420076,
+        0.013207390709036817
+      ],
+      "wilcoxon_vs_transfer": {
+        "statistic": 821.0,
+        "p_value": 0.08628100255674595,
+        "significant_05": false,
+        "mean_diff": -0.19,
+        "median_diff": 0.0,
+        "n_pairs": 200,
+        "p_holm": 0.3451240102269838,
+        "reject_holm_05": false
+      }
+    }
+  ],
+  "flips": [
+    {
+      "config": "PyTorch FP32 (CPU)",
+      "precision": "fp32",
+      "runtime": "PyTorch_CPU",
+      "default_thresholds": {
+        "total_ref_boxes": 14185,
+        "total_target_boxes": 14185,
+        "total_matched_boxes": 14185,
+        "flip_rate": 0.0,
+        "total_flips": 0,
+        "lost_tps": 0,
+        "new_tps": 0,
+        "new_fps": 0,
+        "suppressed_fps": 0,
+        "flip_tp_count": 0,
+        "flip_fp_count": 0,
+        "frac_flip_tp": 0.0,
+        "frac_flip_fp": 0.0,
+        "iou_threshold": 0.5
+      },
+      "calibrated_thresholds": {
+        "total_ref_boxes": 731,
+        "total_target_boxes": 731,
+        "total_matched_boxes": 731,
+        "flip_rate": 0.0,
+        "total_flips": 0,
+        "lost_tps": 0,
+        "new_tps": 0,
+        "new_fps": 0,
+        "suppressed_fps": 0,
+        "flip_tp_count": 0,
+        "flip_fp_count": 0,
+        "frac_flip_tp": 0.0,
+        "frac_flip_fp": 0.0,
+        "iou_threshold": 0.5
+      }
+    },
+    {
+      "config": "ORT FP32 (CPU)",
+      "precision": "fp32",
+      "runtime": "ORT_CPU",
+      "default_thresholds": {
+        "total_ref_boxes": 14185,
+        "total_target_boxes": 14185,
+        "total_matched_boxes": 14185,
+        "flip_rate": 0.0,
+        "total_flips": 0,
+        "lost_tps": 0,
+        "new_tps": 0,
+        "new_fps": 0,
+        "suppressed_fps": 0,
+        "flip_tp_count": 0,
+        "flip_fp_count": 0,
+        "frac_flip_tp": 0.0,
+        "frac_flip_fp": 0.0,
+        "iou_threshold": 0.5
+      },
+      "calibrated_thresholds": {
+        "total_ref_boxes": 731,
+        "total_target_boxes": 731,
+        "total_matched_boxes": 731,
+        "flip_rate": 0.0,
+        "total_flips": 0,
+        "lost_tps": 0,
+        "new_tps": 0,
+        "new_fps": 0,
+        "suppressed_fps": 0,
+        "flip_tp_count": 0,
+        "flip_fp_count": 0,
+        "frac_flip_tp": 0.0,
+        "frac_flip_fp": 0.0,
+        "iou_threshold": 0.5
+      }
+    },
+    {
+      "config": "ORT FP16 (CPU)",
+      "precision": "fp16",
+      "runtime": "ORT_CPU",
+      "default_thresholds": {
+        "total_ref_boxes": 14185,
+        "total_target_boxes": 14193,
+        "total_matched_boxes": 14143,
+        "flip_rate": 0.0065,
+        "total_flips": 92,
+        "lost_tps": 0,
+        "new_tps": 1,
+        "new_fps": 49,
+        "suppressed_fps": 42,
+        "flip_tp_count": 1,
+        "flip_fp_count": 91,
+        "frac_flip_tp": 0.0109,
+        "frac_flip_fp": 0.9891,
+        "iou_threshold": 0.5
+      },
+      "calibrated_thresholds": {
+        "total_ref_boxes": 731,
+        "total_target_boxes": 731,
+        "total_matched_boxes": 731,
+        "flip_rate": 0.0,
+        "total_flips": 0,
+        "lost_tps": 0,
+        "new_tps": 0,
+        "new_fps": 0,
+        "suppressed_fps": 0,
+        "flip_tp_count": 0,
+        "flip_fp_count": 0,
+        "frac_flip_tp": 0.0,
+        "frac_flip_fp": 0.0,
+        "iou_threshold": 0.5
+      }
+    },
+    {
+      "config": "ORT INT8 (CPU)",
+      "precision": "int8",
+      "runtime": "ORT_CPU",
+      "default_thresholds": {
+        "total_ref_boxes": 14185,
+        "total_target_boxes": 14998,
+        "total_matched_boxes": 9854,
+        "flip_rate": 0.4902,
+        "total_flips": 9475,
+        "lost_tps": 18,
+        "new_tps": 10,
+        "new_fps": 5134,
+        "suppressed_fps": 4313,
+        "flip_tp_count": 28,
+        "flip_fp_count": 9447,
+        "frac_flip_tp": 0.003,
+        "frac_flip_fp": 0.997,
+        "iou_threshold": 0.5
+      },
+      "calibrated_thresholds": {
+        "total_ref_boxes": 731,
+        "total_target_boxes": 704,
+        "total_matched_boxes": 604,
+        "flip_rate": 0.2732,
+        "total_flips": 227,
+        "lost_tps": 11,
+        "new_tps": 38,
+        "new_fps": 62,
+        "suppressed_fps": 116,
+        "flip_tp_count": 49,
+        "flip_fp_count": 178,
+        "frac_flip_tp": 0.2159,
+        "frac_flip_fp": 0.7841,
+        "iou_threshold": 0.5
+      }
+    }
+  ]
+}

@@ -17,14 +17,14 @@ def compute_image_auroc(y_true: Union[List[int], np.ndarray], y_score: Union[Lis
         y_score: Continuous anomaly prediction scores.
 
     Returns:
-        Scalar AUROC in [0.0, 1.0].
+        Scalar AUROC in [0.0, 1.0], or NaN if only one class is present.
     """
     y_true_arr = np.asarray(y_true, dtype=np.int32)
     y_score_arr = np.asarray(y_score, dtype=np.float32)
 
-    # Handle edge case where only one class is present in test set
+    # AUROC is undefined when only one class is present
     if len(np.unique(y_true_arr)) < 2:
-        return 1.0 if np.all(y_true_arr == 0) else 0.5
+        return float("nan")
 
     return float(round(roc_auc_score(y_true_arr, y_score_arr), 4))
 
@@ -50,7 +50,7 @@ def compute_pixel_auroc(
     flat_masks = (flat_masks > 0.5).astype(np.int32)
 
     if len(np.unique(flat_masks)) < 2:
-        return 1.0
+        return float("nan")
 
     return float(round(roc_auc_score(flat_masks, flat_maps), 4))
 
@@ -89,7 +89,7 @@ def compute_aupro(
             regions.append(a_map[region_mask])
 
     if not regions or total_normal_pixels == 0:
-        return 1.0
+        return float("nan")
 
     # Determine threshold range using percentiles
     all_scores = np.concatenate([a.flatten() for a in anomaly_maps])

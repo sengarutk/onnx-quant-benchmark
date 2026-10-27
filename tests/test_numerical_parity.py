@@ -10,6 +10,7 @@ from src.export.export_onnx import export_model_family
 from src.models.industrial_model_adapter import IndustrialModelAdapter
 from src.models.yolo_adapter import YOLOAdapter
 from src.validation.numerical_equivalence import compare_pytorch_vs_onnx, evaluate_onnx_dataset
+from tests.conftest import requires_artifacts
 
 
 class TestNumericalParity:
@@ -26,7 +27,7 @@ class TestNumericalParity:
 
         assert report["all_passed"] is True
         assert "output0" in report["outputs"]
-        assert report["outputs"]["output0"]["max_abs_error"] < 1e-4
+        assert report["outputs"]["output0"]["max_rel_error"] < 1e-5
         assert report["outputs"]["output0"]["cosine_similarity"] > 0.99999
 
     def test_industrial_autoencoder_pytorch_vs_onnx_parity(self, tmp_path: Path) -> None:
@@ -51,27 +52,17 @@ class TestNumericalParity:
         assert report["all_passed"] is True
         assert "reconstruction" in report["outputs"]
         assert "anomaly_map" in report["outputs"]
-        assert report["outputs"]["reconstruction"]["max_abs_error"] < 1e-4
-        assert report["outputs"]["anomaly_map"]["max_abs_error"] < 1e-4
+        assert report["outputs"]["reconstruction"]["max_rel_error"] < 1e-5
+        assert report["outputs"]["anomaly_map"]["max_rel_error"] < 1e-5
 
-    def test_evaluate_onnx_dataset_parity(self) -> None:
-        """Verifies full dataset task metrics match PyTorch baseline within 0.0001."""
-        root_dir = Path(__file__).resolve().parent.parent
-        manifest_file = root_dir / "data" / "sample_images" / "manifest.json"
-
-        if not manifest_file.is_file():
-            pytest.skip("Sample dataset manifest not generated")
-
-        # Test industrial autoencoder dataset parity if exported model exists
-        exported_dir = root_dir / "models" / "exported"
-        ind_onnx = exported_dir / "industrial_autoencoder_fp32_opset17.onnx"
-
-        if not ind_onnx.is_file():
-            ind_onnx = export_model_family("industrial_autoencoder", output_dir=exported_dir)
-
-        report = evaluate_onnx_dataset(
-            "industrial_autoencoder",
-            ind_onnx,
-            sample_manifest_path=manifest_file,
-        )
-        assert report["parity_passed"] is True
+    @requires_artifacts
+    def test_evaluate_onnx_dataset_matches_pytorch_baseline(self) -> None:
+        """ONNX Runtime FP32 reproduces the stored PyTorch FP32 test-split metrics."""
+        import json
+        root = Path(__file__).resolve().parent.parent
+        for model, key in (("yolo_nano", "mAP_50"), ("industrial_autoencoder", "image_auroc")):
+            base = root / "results" / "baselines" / f"{model}.json"
+            if not base.is_file():
+                pytest.skip("baselines not generated")
+            report = evaluate_onnx_dataset(model, root / "models" / "exported" / f"{model}_fp32_opset17.onnx")
+            assert abs(report["metrics"][key] - json.loads(base.read_text())["metrics"][key]) <= 1e-3

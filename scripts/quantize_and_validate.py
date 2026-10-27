@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
-Quantization and validation driver: FP16 conversion, Static INT8 PTQ calibration, and quality degradation auditing.
+FP16 conversion and static INT8 post-training quantization of the exported FP32 ONNX graphs, followed by
+test-split quality gating against the PyTorch FP32 baseline. Renders docs/int8-calibration.md and
+models/exported/quantization_manifest.json.
 """
 
 import csv
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -12,188 +15,152 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.common.config import QualityThresholdConfig
+from src.benchmarking.memory import get_artifact_size_mb
+from src.common.hashes import compute_file_sha256
 from src.common.logging import setup_logger
 from src.common.seed import seed_everything
 from src.models.preprocess import preprocess_detection_image, preprocess_industrial_image
 from src.quantization.calibration_reader import BenchmarkCalibrationDataReader
 from src.quantization.convert_fp16 import convert_onnx_to_fp16
-from src.quantization.quantize_onnx import quantize_onnx_static
+from src.quantization.quantize_onnx import DEFAULT_QUANTIZED_OPS, quantize_onnx_static
 from src.validation.validate_quantization import validate_quantized_model
 
 logger = setup_logger("quantize_and_validate")
 
+QUANT_SETTINGS = {
+    "format": "QDQ",
+    "calibrate_method": "selected per model on the calibration split from CALIBRATION_METHODS",
+    "per_channel": True,
+    "weight_type": "QInt8",
+    "activation_type": "QUInt8",
+    "symmetric_weights": True,
+    "symmetric_activations": True,
+    "op_types": DEFAULT_QUANTIZED_OPS,
+}
+
+
+CALIBRATION_METHODS = ["MinMax", "Percentile", "Entropy"]
+
+
+def calibration_split_score(model: str, onnx_path: Path, fp32_path: Path, calib_json: Path) -> float:
+    """
+    Selection criterion computed on the CALIBRATION split only (never the test split):
+    detector -> mAP@50 on the labeled calibration images; autoencoder -> negative mean relative error of the
+    anomaly map vs the FP32 graph on the (normal) calibration textures.
+    """
+    import numpy as np
+    import onnxruntime as ort
+    from src.data.writers import load_manifest
+    from src.validation.numerical_equivalence import evaluate_onnx_dataset
+
+    if model == "yolo_nano":
+        return float(evaluate_onnx_dataset(model, onnx_path, calib_json)["metrics"]["mAP_50"])
+    cand = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+    ref = ort.InferenceSession(str(fp32_path), providers=["CPUExecutionProvider"])
+    errs = []
+    for s in load_manifest(calib_json)["industrial_samples"]:
+        x = preprocess_industrial_image(PROJECT_ROOT / s["image_path"]).numpy()
+        a = ref.run(None, {"input": x})[1]
+        b = cand.run(None, {"input": x})[1]
+        errs.append(float(np.abs(a - b).mean() / (np.abs(a).mean() + 1e-12)))
+    return -float(np.mean(errs))
+
 
 def main() -> None:
     seed_everything(42)
-    logger.info("=" * 65)
-    logger.info("  STARTING PHASE 3: QUANTIZATION (FP16 & STATIC INT8 PTQ)")
-    logger.info("=" * 65)
+    exp = PROJECT_ROOT / "models" / "exported"
+    test_manifest = PROJECT_ROOT / "data" / "sample_images" / "manifest.json"
+    calib_csv = PROJECT_ROOT / "data" / "calibration" / "manifest.csv"
+    calib_json = PROJECT_ROOT / "data" / "calibration" / "manifest.json"
+    if not calib_csv.is_file():
+        raise FileNotFoundError("Calibration split missing: run scripts/prepare_calibration_data.py")
 
-    exp_dir = PROJECT_ROOT / "models" / "exported"
-    sample_manifest = PROJECT_ROOT / "data" / "sample_images" / "manifest.json"
-    calib_manifest = PROJECT_ROOT / "data" / "calibration" / "manifest.csv"
+    calib = {"detection": [], "industrial": []}
+    with open(calib_csv, encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            calib[row["category"]].append(PROJECT_ROOT / row["path"])
 
-    if not calib_manifest.is_file():
-        from scripts.prepare_calibration_data import generate_calibration_data
-        generate_calibration_data()
-
-    # Load calibration paths from manifest
-    calib_det_paths = []
-    calib_ind_paths = []
-    with open(calib_manifest, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            if row["category"] == "detection":
-                calib_det_paths.append(PROJECT_ROOT / row["path"])
-            elif row["category"] == "industrial":
-                calib_ind_paths.append(PROJECT_ROOT / row["path"])
-
-    thresh_cfg = QualityThresholdConfig(max_map_drop=0.015, max_auroc_drop=0.010)
-    audit_results = {}
-
-    yolo_base_json = PROJECT_ROOT / "results" / "raw" / "pytorch_fp32" / "yolo_nano" / "baseline_metrics.json"
-    ind_base_json = PROJECT_ROOT / "results" / "raw" / "pytorch_fp32" / "industrial_autoencoder" / "baseline_metrics.json"
-
-    if not yolo_base_json.is_file() or not ind_base_json.is_file():
-        import subprocess
-        logger.info("Baseline metrics missing, executing PyTorch baselines...")
-        subprocess.run([sys.executable, str(PROJECT_ROOT / "scripts" / "run_pytorch_baselines.py")], check=True)
-
-    # =========================================================================
-    # 1. YOLO Nano Quantization Suite
-    # =========================================================================
-    logger.info("\n--- Processing YOLO Nano Quantization ---")
-    yolo_fp32_onnx = exp_dir / "yolo_nano_fp32_opset17.onnx"
-
-    # FP16 Conversion
-    yolo_fp16_onnx = exp_dir / "yolo_nano_fp16.onnx"
-    convert_onnx_to_fp16(yolo_fp32_onnx, yolo_fp16_onnx)
-    yolo_fp16_val = validate_quantized_model(
-        "yolo_nano", "fp16", yolo_fp16_onnx, sample_manifest, yolo_base_json, thresh_cfg
-    )
-    logger.info(f"YOLO FP16 Validation: {yolo_fp16_val['status']} (mAP@50: {yolo_fp16_val['metrics']['mAP_50']})")
-
-    # Static INT8 PTQ
-    yolo_reader = BenchmarkCalibrationDataReader(
-        image_paths=calib_det_paths,
-        input_name="images",
-        input_shape=(1, 3, 640, 640),
-        preprocess_fn=preprocess_detection_image,
-        batch_size=1,
-    )
-    yolo_int8_onnx = exp_dir / "yolo_nano_static_int8.onnx"
-    quantize_onnx_static(
-        input_onnx_path=yolo_fp32_onnx,
-        output_onnx_path=yolo_int8_onnx,
-        calibration_data_reader=yolo_reader,
-        quant_format="QDQ",
-        calibrate_method="MinMax",
-    )
-    yolo_int8_val = validate_quantized_model(
-        "yolo_nano", "int8", yolo_int8_onnx, sample_manifest, yolo_base_json, thresh_cfg
-    )
-    logger.info(f"YOLO INT8 Validation: {yolo_int8_val['status']} (mAP@50: {yolo_int8_val['metrics']['mAP_50']})")
-
-    audit_results["yolo_nano"] = {
-        "fp16": yolo_fp16_val,
-        "int8": yolo_int8_val,
+    specs = {
+        "yolo_nano": ("images", (1, 3, 640, 640), preprocess_detection_image, calib["detection"]),
+        "industrial_autoencoder": ("input", (1, 3, 256, 256), preprocess_industrial_image, calib["industrial"]),
     }
+    report = {"settings": QUANT_SETTINGS, "models": {}}
 
-    # =========================================================================
-    # 2. Industrial Autoencoder Quantization Suite
-    # =========================================================================
-    logger.info("\n--- Processing Industrial Autoencoder Quantization ---")
-    ind_fp32_onnx = exp_dir / "industrial_autoencoder_fp32_opset17.onnx"
-    ind_base_json = PROJECT_ROOT / "results" / "raw" / "pytorch_fp32" / "industrial_autoencoder" / "baseline_metrics.json"
+    for model, (in_name, shape, pre_fn, paths) in specs.items():
+        fp32 = exp / f"{model}_fp32_opset17.onnx"
+        baseline = PROJECT_ROOT / "results" / "baselines" / f"{model}.json"
+        fp16 = convert_onnx_to_fp16(fp32, exp / f"{model}_fp16.onnx")
+        # INT8: quantize with every calibration method, select on the calibration split, keep all for transparency
+        candidates = {}
+        for method in CALIBRATION_METHODS:
+            path = quantize_onnx_static(
+                fp32, exp / f"{model}_int8_{method.lower()}.onnx",
+                BenchmarkCalibrationDataReader(paths, in_name, shape, pre_fn),
+                quant_format=QUANT_SETTINGS["format"], calibrate_method=method,
+                per_channel=QUANT_SETTINGS["per_channel"], weight_type=QUANT_SETTINGS["weight_type"],
+                activation_type=QUANT_SETTINGS["activation_type"],
+            )
+            score = calibration_split_score(model, path, fp32, calib_json)
+            test_v = validate_quantized_model(model, "int8", path, test_manifest, baseline)
+            candidates[method] = {"file": path.name, "calibration_split_score": score,
+                                  "test_metric": test_v["metrics"][test_v["gated_metric"]], "test_delta": test_v["delta"],
+                                  "test_status": test_v["status"]}
+            logger.info(f"{model} INT8/{method}: calibration-split score {score:.4f} | test delta {test_v['delta']:+.4f}")
+        selected = max(CALIBRATION_METHODS, key=lambda m: candidates[m]["calibration_split_score"])
+        int8 = exp / f"{model}_static_int8.onnx"
+        shutil.copy2(exp / candidates[selected]["file"], int8)
+        (int8.with_name(int8.name + ".sha256")).write_text(f"{compute_file_sha256(int8)}  {int8.name}\n", encoding="utf-8")
+        entry = {"calibration_images": len(paths), "fp32_size_mb": round(get_artifact_size_mb(fp32), 3),
+                 "int8_calibration_method": selected, "int8_method_ablation": candidates}
+        for prec, path in (("fp16", fp16), ("int8", int8)):
+            v = validate_quantized_model(model, prec, path, test_manifest, baseline)
+            entry[prec] = {"file": path.name, "size_mb": round(get_artifact_size_mb(path), 3), "status": v["status"],
+                           "metric": v["gated_metric"], "value": v["metrics"][v["gated_metric"]],
+                           "baseline": v["baseline_metrics"][v["gated_metric"]], "delta": v["delta"],
+                           "max_allowed_drop": v["max_allowed_drop"], "metrics": v["metrics"]}
+            logger.info(f"{model} {prec.upper()}: {v['status']} ({v['gated_metric']} {entry[prec]['value']:.4f}, delta {v['delta']:+.4f})")
+        report["models"][model] = entry
 
-    # FP16 Conversion
-    ind_fp16_onnx = exp_dir / "industrial_autoencoder_fp16.onnx"
-    convert_onnx_to_fp16(ind_fp32_onnx, ind_fp16_onnx)
-    ind_fp16_val = validate_quantized_model(
-        "industrial_autoencoder", "fp16", ind_fp16_onnx, sample_manifest, ind_base_json, thresh_cfg
-    )
-    logger.info(f"Industrial FP16 Validation: {ind_fp16_val['status']} (AUROC: {ind_fp16_val['metrics']['image_auroc']})")
-
-    # Static INT8 PTQ
-    ind_reader = BenchmarkCalibrationDataReader(
-        image_paths=calib_ind_paths,
-        input_name="input",
-        input_shape=(1, 3, 256, 256),
-        preprocess_fn=preprocess_industrial_image,
-        batch_size=1,
-    )
-    ind_int8_onnx = exp_dir / "industrial_autoencoder_static_int8.onnx"
-    quantize_onnx_static(
-        input_onnx_path=ind_fp32_onnx,
-        output_onnx_path=ind_int8_onnx,
-        calibration_data_reader=ind_reader,
-        quant_format="QDQ",
-        calibrate_method="MinMax",
-    )
-    ind_int8_val = validate_quantized_model(
-        "industrial_autoencoder", "int8", ind_int8_onnx, sample_manifest, ind_base_json, thresh_cfg
-    )
-    logger.info(f"Industrial INT8 Validation: {ind_int8_val['status']} (AUROC: {ind_int8_val['metrics']['image_auroc']})")
-
-    audit_results["industrial_autoencoder"] = {
-        "fp16": ind_fp16_val,
-        "int8": ind_int8_val,
-    }
-
-    # Generate Markdown Report
-    doc_path = PROJECT_ROOT / "docs" / "int8-calibration.md"
-    generate_calibration_doc(audit_results, doc_path)
-    logger.info(f"\nQuantization audit report rendered -> {doc_path}")
+    (exp / "quantization_manifest.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    (PROJECT_ROOT / "results" / "quantization_validation.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
+    render_doc(report, PROJECT_ROOT / "docs" / "int8-calibration.md")
 
 
-def generate_calibration_doc(audit_data: dict, output_path: Path) -> None:
-    yolo = audit_data["yolo_nano"]
-    ind = audit_data["industrial_autoencoder"]
-
-    md = f"""# Quantization (FP16 & Static INT8 PTQ) Calibration & Validation Report
-
-This report documents the half-precision conversion, Static INT8 Post-Training Quantization (PTQ) calibration, and quality degradation gating for the `onnx-edge-inference-benchmark` repository.
-
----
-
-## 1. Calibration Dataset Configuration
-
-- **Detection Calibration Split**: 50 disjoint images ($640 \\times 640$) in `data/calibration/detection/`
-- **Industrial Inspection Split**: 50 disjoint normal images ($256 \\times 256$) in `data/calibration/industrial/`
-- **Isolation Guarantee**: Zero hash overlap with test sets in `data/sample_images/`.
-- **Calibration Algorithm**: Static MinMax Activation Histogram Range Tracking.
-
----
-
-## 2. Quantization Quality Degradation Audit
-
-### 2.1. Object Detector (YOLO Nano)
-
-| Precision | Target Format | Metric (mAP@50) | Baseline FP32 | Quantized Value | Delta ($\\Delta$) | Gate Threshold | Decision Status |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **FP16** | Float16 | mAP@50 | `{yolo['fp16']['baseline_metrics']['mAP_50']}` | `{yolo['fp16']['metrics']['mAP_50']}` | `{yolo['fp16']['delta_map_50']}` | $\\le 0.015$ | `{yolo['fp16']['status']}` |
-| **Static INT8** | QDQ (QInt8) | mAP@50 | `{yolo['int8']['baseline_metrics']['mAP_50']}` | `{yolo['int8']['metrics']['mAP_50']}` | `{yolo['int8']['delta_map_50']}` | $\\le 0.015$ | `{yolo['int8']['status']}` |
-
-### 2.2. Industrial Inspection Model (ConvAutoencoder)
-
-| Precision | Target Format | Metric (Image AUROC) | Baseline FP32 | Quantized Value | Delta ($\\Delta$) | Gate Threshold | Decision Status |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **FP16** | Float16 | Image AUROC | `{ind['fp16']['baseline_metrics']['image_auroc']}` | `{ind['fp16']['metrics']['image_auroc']}` | `{ind['fp16']['delta_auroc']}` | $\\le 0.010$ | `{ind['fp16']['status']}` |
-| **Static INT8** | QDQ (QInt8) | Image AUROC | `{ind['int8']['baseline_metrics']['image_auroc']}` | `{ind['int8']['metrics']['image_auroc']}` | `{ind['int8']['delta_auroc']}` | $\\le 0.010$ | `{ind['int8']['status']}` |
-
----
-
-## 3. Artifact Checksum Matrix
-
-| Model | Precision | Filename | Size |
-| :--- | :--- | :--- | :--- |
-| YOLO Nano | FP16 | `models/exported/yolo_nano_fp16.onnx` | ~0.84 MB |
-| YOLO Nano | Static INT8 | `models/exported/yolo_nano_static_int8.onnx` | ~0.50 MB |
-| Industrial Autoencoder | FP16 | `models/exported/industrial_autoencoder_fp16.onnx` | ~2.72 MB |
-| Industrial Autoencoder | Static INT8 | `models/exported/industrial_autoencoder_static_int8.onnx` | ~1.46 MB |
-"""
-    output_path.write_text(md, encoding="utf-8")
+def render_doc(report: dict, path: Path) -> None:
+    s = report["settings"]
+    md = ["# FP16 Conversion & Static INT8 PTQ Report", "",
+          "Generated by `scripts/quantize_and_validate.py`. Quality is measured with ONNX Runtime (CPU) on the full "
+          "synthetic test split and compared with the PyTorch FP32 baseline (`results/baselines/`).", "",
+          "## 1. Settings", "",
+          f"- **INT8**: ONNX Runtime `quantize_static`, {s['format']} format, calibration method selected per model on the "
+          f"calibration split among {', '.join(CALIBRATION_METHODS)} (detector: calibration-split mAP@50; autoencoder: "
+          "anomaly-map relative error vs FP32), "
+          f"{'per-channel' if s['per_channel'] else 'per-tensor'} {s['weight_type']} weights, {s['activation_type']} activations "
+          f"(symmetric), quantized op types: {', '.join(s['op_types'])}.",
+          "- **FP16**: `onnxconverter_common.float16.convert_float_to_float16` with FP32 graph inputs/outputs.",
+          f"- **Calibration data**: the labeled calibration split (`data/calibration/`, "
+          f"{report['models']['yolo_nano']['calibration_images']} detection / "
+          f"{report['models']['industrial_autoencoder']['calibration_images']} normal industrial images), generated from a "
+          "seed range disjoint from the test split (SHA-256 overlap verified to be 0).", "",
+          "## 2. Results", "",
+          "| Model | Precision | File | Size (MB) | vs FP32 | Gated metric | Value | FP32 baseline | Delta | Allowed drop | Status |",
+          "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for model, e in report["models"].items():
+        for prec in ("fp16", "int8"):
+            x = e[prec]
+            md.append(f"| `{model}` | {prec.upper()} | `{x['file']}` | {x['size_mb']:.2f} | "
+                      f"{(x['size_mb'] / e['fp32_size_mb'] - 1) * 100:+.1f}% | {x['metric']} | {x['value']:.4f} | "
+                      f"{x['baseline']:.4f} | {x['delta']:+.4f} | {x['max_allowed_drop']} | {x['status']} |")
+    md += ["", "## 3. INT8 calibration-method ablation", "",
+           "The method is selected on the calibration split (column 3); test-split results of every method are listed "
+           "for transparency but were not used for the choice.", "",
+           "| Model | Method | Calibration-split score | Test metric | Test delta vs FP32 | Test gate | Selected |",
+           "| --- | --- | --- | --- | --- | --- | --- |"]
+    for model, e in report["models"].items():
+        for method, c in e["int8_method_ablation"].items():
+            md.append(f"| `{model}` | {method} | {c['calibration_split_score']:.4f} | {c['test_metric']:.4f} | "
+                      f"{c['test_delta']:+.4f} | {c['test_status']} | {'yes' if method == e['int8_calibration_method'] else ''} |")
+    path.write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

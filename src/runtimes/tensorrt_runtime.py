@@ -17,6 +17,29 @@ from src.runtimes.base import BaseRuntime
 
 logger = setup_logger("tensorrt_runtime")
 
+
+def _trt_to_torch_dtype(dtype_trt: Any) -> Tuple[torch.dtype, Any]:
+    """Maps a TensorRT DataType to (torch dtype, numpy dtype)."""
+    mapping = {
+        "FLOAT": (torch.float32, np.float32),
+        "HALF": (torch.float16, np.float16),
+        "INT8": (torch.int8, np.int8),
+        "INT32": (torch.int32, np.int32),
+        "INT64": (torch.int64, np.int64),
+        "BOOL": (torch.bool, np.bool_),
+        "UINT8": (torch.uint8, np.uint8),
+    }
+    for name, pair in mapping.items():
+        if hasattr(trt.DataType, name) and dtype_trt == getattr(trt.DataType, name):
+            return pair
+    raise TypeError(f"Unsupported TensorRT tensor dtype: {dtype_trt}")
+
+
+def _static_shape(shape: Tuple[int, ...], name: str) -> Tuple[int, ...]:
+    if any(d < 0 for d in shape):
+        raise ValueError(f"TensorRT tensor '{name}' has dynamic shape {shape}; build the engine with static shapes")
+    return shape
+
 try:
     import tensorrt as trt
     TRT_AVAILABLE = True
@@ -68,12 +91,10 @@ class TensorRTRuntime(BaseRuntime):
         if hasattr(self.engine, "num_io_tensors"):
             for i in range(self.engine.num_io_tensors):
                 name = self.engine.get_tensor_name(i)
-                shape = tuple(self.engine.get_tensor_shape(name))
+                shape = _static_shape(tuple(self.engine.get_tensor_shape(name)), name)
                 dtype_trt = self.engine.get_tensor_dtype(name)
                 is_input = self.engine.get_tensor_mode(name) == trt.TensorIOMode.INPUT
-
-                torch_dtype = torch.float32 if dtype_trt == trt.DataType.FLOAT else torch.float16
-                np_dtype = np.float32 if dtype_trt == trt.DataType.FLOAT else np.float16
+                torch_dtype, np_dtype = _trt_to_torch_dtype(dtype_trt)
 
                 buf = torch.empty(shape, dtype=torch_dtype, device=f"cuda:{self.device_id}")
                 self._buffers[name] = buf
@@ -85,12 +106,10 @@ class TensorRTRuntime(BaseRuntime):
             # TRT 8.x fallback
             for i in range(self.engine.num_bindings):
                 name = self.engine.get_binding_name(i)
-                shape = tuple(self.engine.get_binding_shape(i))
+                shape = _static_shape(tuple(self.engine.get_binding_shape(i)), name)
                 dtype_trt = self.engine.get_binding_dtype(i)
                 is_input = self.engine.binding_is_input(i)
-
-                torch_dtype = torch.float32 if dtype_trt == trt.DataType.FLOAT else torch.float16
-                np_dtype = np.float32 if dtype_trt == trt.DataType.FLOAT else np.float16
+                torch_dtype, np_dtype = _trt_to_torch_dtype(dtype_trt)
 
                 buf = torch.empty(shape, dtype=torch_dtype, device=f"cuda:{self.device_id}")
                 self._buffers[name] = buf
@@ -107,7 +126,11 @@ class TensorRTRuntime(BaseRuntime):
             self.load()
 
         inp_name = list(self._input_specs.keys())[0]
-        self._buffers[inp_name].copy_(input_tensor)
+        # Order the input copy and the engine execution on the same dedicated stream; the stream first waits for
+        # any producer work queued on the caller's current stream.
+        self.stream.wait_stream(torch.cuda.current_stream(self.device_id))
+        with torch.cuda.stream(self.stream):
+            self._buffers[inp_name].copy_(input_tensor, non_blocking=True)
 
         # TRT 10.x execution vs 8.x execution
         if hasattr(self.context, "execute_async_v3"):

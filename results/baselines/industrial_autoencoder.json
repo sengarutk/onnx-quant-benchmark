@@ -1,0 +1,13 @@
+{
+  "model_name": "industrial_autoencoder",
+  "precision": "fp32",
+  "runtime": "pytorch_cpu",
+  "split": "test",
+  "sample_count": 200,
+  "weights_sha256": "a5b9c1582ded877c028fd0958068032d6b562edcd6e6db9766ca8c18897b2a5c",
+  "metrics": {
+    "image_auroc": 0.9309,
+    "pixel_auroc": 0.6193,
+    "aupro": 0.8011
+  }
+}

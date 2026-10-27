@@ -71,3 +71,12 @@ class TestEnvironment:
         assert opts.intra_op_num_threads == 4
         assert opts.inter_op_num_threads == 1
         assert opts.execution_mode == ort.ExecutionMode.ORT_SEQUENTIAL
+
+    def test_cpu_model_os_and_cudnn_formatting(self) -> None:
+        from src.common.environment import _format_cudnn, _get_cpu_model, _get_os_distro
+        assert _get_cpu_model() not in ("", "x86_64") or not Path("/proc/cpuinfo").is_file()
+        assert _get_os_distro() != ""
+        assert _format_cudnn(90100) == "9.1.0"
+        assert _format_cudnn(91002) == "9.10.2"
+        assert _format_cudnn(8902) == "8.9.2"
+        assert _format_cudnn(None) is None

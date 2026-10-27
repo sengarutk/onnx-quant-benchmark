@@ -22,6 +22,19 @@ from src.common.logging import setup_logger
 logger = setup_logger("export_onnx")
 
 
+class AutoencoderExportWrapper(nn.Module):
+    """Wraps the ConvAutoencoder so the exported graph emits (reconstruction, anomaly_map)."""
+
+    def __init__(self, core_model: nn.Module):
+        super().__init__()
+        self.core = core_model
+
+    def forward(self, x: torch.Tensor):
+        recon = self.core(x)
+        a_map = torch.mean(torch.abs(x - recon), dim=1, keepdim=True)
+        return recon, a_map
+
+
 def _get_git_commit() -> str:
     try:
         return subprocess.check_output(
@@ -85,7 +98,6 @@ def export_to_onnx(
     meta_props.setdefault("opset", str(opset_version))
     meta_props.setdefault("git_commit", _get_git_commit())
     meta_props.setdefault("framework", f"PyTorch {torch.__version__}")
-    meta_props.setdefault("export_timestamp", datetime.now(timezone.utc).isoformat())
 
     for k, v in meta_props.items():
         meta = onnx_model.metadata_props.add()
@@ -152,7 +164,7 @@ def export_model_family(
             "model_name": "yolo_nano",
             "task": "detection",
             "input_shape": json.dumps([1, 3, 640, 640]),
-            "output_shape": json.dumps([1, 84, 8400]),
+            "output_shape": json.dumps([1, 4 + pytorch_model.num_classes, 8400]),
             "conf_threshold": "0.25",
             "iou_threshold": "0.45",
         }
@@ -169,16 +181,6 @@ def export_model_family(
     elif model_type == "industrial_autoencoder":
         from src.models.industrial_model_adapter import IndustrialModelAdapter
 
-        class AutoencoderExportWrapper(nn.Module):
-            def __init__(self, core_model: nn.Module):
-                super().__init__()
-                self.core = core_model
-
-            def forward(self, x: torch.Tensor):
-                recon = self.core(x)
-                a_map = torch.mean(torch.abs(x - recon), dim=1, keepdim=True)
-                return recon, a_map
-
         if model_instance is None:
             adapter = IndustrialModelAdapter(weights_path=weights_path)
             export_model = AutoencoderExportWrapper(adapter.get_pytorch_model())
@@ -190,7 +192,7 @@ def export_model_family(
         out_file = out_dir_path / "industrial_autoencoder_fp32_opset17.onnx"
         meta = {
             "model_name": "industrial_autoencoder",
-            "task": "reconstruction",
+            "task": "anomaly_detection",
             "input_shape": json.dumps([1, 3, 256, 256]),
             "output_shapes": json.dumps({"reconstruction": [1, 3, 256, 256], "anomaly_map": [1, 1, 256, 256]}),
         }

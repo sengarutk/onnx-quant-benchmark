@@ -1,149 +1,111 @@
 #!/usr/bin/env python3
 """
-Runtime validation CLI: Tests PyTorch, ORT CPU, ORT CUDA, and TensorRT engines for correctness.
+Smoke-validates every runtime backend that is usable on this host against the PyTorch FP32 CPU reference and
+renders docs/runtimes.md with the observed status (PASS / FAIL / NOT AVAILABLE and the reason).
 """
 
+import copy
 import sys
 from pathlib import Path
+from typing import Any, Dict, List
 import numpy as np
+import onnxruntime as ort
 import torch
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from src.common.config import load_quality_thresholds
 from src.common.logging import setup_logger
 from src.common.seed import seed_everything
-from src.models.industrial_model_adapter import IndustrialModelAdapter
+from src.data.writers import load_manifest
+from src.models.preprocess import preprocess_detection_image
 from src.models.yolo_adapter import YOLOAdapter
+from src.runtimes.fallback_audit import assert_zero_fallback
 from src.runtimes.ort_cpu_runtime import ORTCPURuntime
+from src.runtimes.ort_cuda_runtime import ORTCUDARuntime
 from src.runtimes.pytorch_runtime import PyTorchRuntime
+from src.runtimes.tensorrt_runtime import TRT_AVAILABLE, TensorRTRuntime
 from src.validation.output_checks import compute_tensor_diff
 
 logger = setup_logger("validate_runtimes")
+EXP = PROJECT_ROOT / "models" / "exported"
 
 
 def main() -> None:
     seed_everything(42)
-    logger.info("=" * 65)
-    logger.info("  STARTING PHASE 4: MULTI-BACKEND RUNTIME VALIDATION")
-    logger.info("=" * 65)
+    adapter = YOLOAdapter(require_weights=True)
+    sample = load_manifest(PROJECT_ROOT / "data" / "sample_images" / "manifest.json")["detection_samples"][0]
+    x = preprocess_detection_image(PROJECT_ROOT / sample["image_path"])[0].numpy()
+    ref_rt = PyTorchRuntime(copy.deepcopy(adapter.model), device="cpu")
+    ref = ref_rt.predict({"images": x})["output0"]
 
-    exp_dir = PROJECT_ROOT / "models" / "exported"
-    yolo_onnx = exp_dir / "yolo_nano_fp32_opset17.onnx"
-    ind_onnx = exp_dir / "industrial_autoencoder_fp32_opset17.onnx"
+    rows: List[Dict[str, Any]] = []
 
-    audit_summary = []
+    def check(name: str, precision: str, make) -> None:
+        try:
+            rt = make()
+            rt.load()
+            assert_zero_fallback(rt)
+            out = list(rt.predict({next(iter(rt.get_input_spec())): x}).values())[0]
+            d = compute_tensor_diff(ref, out)
+            gate = load_quality_thresholds("yolo_nano", precision)
+            ok = d["max_rel_error"] <= gate.max_rel_error and d["cosine_similarity"] >= gate.min_cosine_similarity
+            rows.append({"runtime": name, "precision": precision, "provider": rt.get_active_provider(),
+                         "status": "PASS" if ok else "GATE FAIL", "detail": f"max rel. error {d['max_rel_error']:.2e}, cosine {d['cosine_similarity']:.6f}"})
+            rt.cleanup()
+        except Exception as exc:  # noqa: BLE001 - recorded in the report
+            rows.append({"runtime": name, "precision": precision, "provider": "-", "status": "ERROR", "detail": f"{type(exc).__name__}: {exc}"})
 
-    # 1. PyTorch Runtime (CPU)
-    yolo_adapter = YOLOAdapter()
-    pt_cpu_yolo = PyTorchRuntime(yolo_adapter.get_pytorch_model(), device="cpu")
-    dummy_yolo = np.random.randn(1, 3, 640, 640).astype(np.float32)
-    pt_yolo_out = pt_cpu_yolo.predict({"images": dummy_yolo})["output0"]
-
-    audit_summary.append({
-        "runtime": "PyTorch CPU",
-        "model": "YOLO Nano (FP32)",
-        "status": "PASS",
-        "provider": pt_cpu_yolo.get_active_provider(),
-    })
-    logger.info("PyTorch CPU runtime: PASS")
-
-    # 2. PyTorch Runtime (CUDA if available)
+    check("PyTorch CPU", "fp32", lambda: PyTorchRuntime(copy.deepcopy(adapter.model), device="cpu"))
     if torch.cuda.is_available():
-        pt_cuda_yolo = PyTorchRuntime(yolo_adapter.get_pytorch_model(), device="cuda:0")
-        pt_cuda_out = pt_cuda_yolo.predict({"images": dummy_yolo})["output0"]
-        diff_pt = compute_tensor_diff(pt_yolo_out, pt_cuda_out)
-        audit_summary.append({
-            "runtime": "PyTorch CUDA",
-            "model": "YOLO Nano (FP32)",
-            "status": "PASS",
-            "provider": pt_cuda_yolo.get_active_provider(),
-            "max_abs_error": diff_pt["max_abs_error"],
-        })
-        logger.info(f"PyTorch CUDA runtime: PASS (L_inf diff: {diff_pt['max_abs_error']:.2e})")
+        check("PyTorch CUDA", "fp32", lambda: PyTorchRuntime(copy.deepcopy(adapter.model), device="cuda:0"))
+        check("PyTorch CUDA", "fp16", lambda: PyTorchRuntime(copy.deepcopy(adapter.model), device="cuda:0", precision="fp16"))
+    else:
+        rows.append({"runtime": "PyTorch CUDA", "precision": "fp32/fp16", "provider": "-", "status": "NOT AVAILABLE",
+                     "detail": "torch.cuda.is_available() is False"})
+    for prec, f in (("fp32", "yolo_nano_fp32_opset17.onnx"), ("fp16", "yolo_nano_fp16.onnx"), ("int8", "yolo_nano_static_int8.onnx")):
+        check("ONNX Runtime CPU", prec, lambda p=EXP / f: ORTCPURuntime(p))
+    if "CUDAExecutionProvider" in ort.get_available_providers():
+        for prec, f in (("fp32", "yolo_nano_fp32_opset17.onnx"), ("fp16", "yolo_nano_fp16.onnx")):
+            check("ONNX Runtime CUDA", prec, lambda p=EXP / f: ORTCUDARuntime(p))
+    else:
+        rows.append({"runtime": "ONNX Runtime CUDA", "precision": "fp32/fp16", "provider": "-", "status": "NOT AVAILABLE",
+                     "detail": f"installed onnxruntime providers: {ort.get_available_providers()}"})
+    engines = sorted((PROJECT_ROOT / "models" / "engines").glob("yolo_nano_*.engine"))
+    if TRT_AVAILABLE and engines and torch.cuda.is_available():
+        for e in engines:
+            check("TensorRT", e.stem.split("_")[-1], lambda p=e: TensorRTRuntime(p))
+    else:
+        rows.append({"runtime": "TensorRT", "precision": "fp32/fp16/int8", "provider": "-", "status": "NOT AVAILABLE",
+                     "detail": "tensorrt Python bindings not installed" if not TRT_AVAILABLE else "no engines built (scripts/build_trt_engines.sh)"})
 
-    # 3. ORT CPU Runtime
-    if yolo_onnx.is_file():
-        ort_cpu = ORTCPURuntime(yolo_onnx, intra_op_threads=8)
-        ort_out = ort_cpu.predict({"images": dummy_yolo})["output0"]
-        diff_ort = compute_tensor_diff(pt_yolo_out, ort_out)
-        audit_summary.append({
-            "runtime": "ORT CPU",
-            "model": "YOLO Nano (FP32)",
-            "status": "PASS",
-            "provider": ort_cpu.get_active_provider(),
-            "max_abs_error": diff_ort["max_abs_error"],
-        })
-        logger.info(f"ORT CPU runtime: PASS (L_inf diff vs PyTorch: {diff_ort['max_abs_error']:.2e})")
-
-    # 4. ORT CPU INT8 Runtime
-    yolo_int8_onnx = exp_dir / "yolo_nano_static_int8.onnx"
-    if yolo_int8_onnx.is_file():
-        ort_int8_cpu = ORTCPURuntime(yolo_int8_onnx)
-        ort_int8_out = ort_int8_cpu.predict({"images": dummy_yolo})["output0"]
-        audit_summary.append({
-            "runtime": "ORT CPU",
-            "model": "YOLO Nano (Static INT8)",
-            "status": "PASS",
-            "provider": ort_int8_cpu.get_active_provider(),
-        })
-        logger.info("ORT CPU Static INT8 runtime: PASS")
-
-    # Generate Markdown documentation
-    doc_path = PROJECT_ROOT / "docs" / "runtimes.md"
-    generate_runtimes_doc(audit_summary, doc_path)
-    logger.info(f"\nRuntime documentation generated -> {doc_path}")
+    for r in rows:
+        logger.info(f"{r['runtime']} {r['precision']}: {r['status']} ({r['detail']})")
+    render_doc(rows, PROJECT_ROOT / "docs" / "runtimes.md")
+    # Gate failures are reported results (e.g. a lossy INT8 graph); only execution errors fail the stage.
+    if any(r["status"] == "ERROR" for r in rows):
+        sys.exit(1)
 
 
-def generate_runtimes_doc(summary: list, output_path: Path) -> None:
-    md = """# Multi-Backend Runtime Execution & Fallback Architecture
-
-This document details the multi-backend execution runtimes, memory management strategies, and fallback auditing rules for the `onnx-edge-inference-benchmark` repository.
-
----
-
-## 1. Supported Runtime Backends
-
-| Backend Runtime | Execution Provider | Threading / Concurrency | Memory Binding Strategy |
-| :--- | :--- | :--- | :--- |
-| **PyTorch Eager** | CPU / CUDA (`torch.inference_mode()`) | PyTorch Thread Pool / Streams | Zero-copy Device Pointers |
-| **ONNX Runtime CPU** | `CPUExecutionProvider` | `intra_op=8`, `inter_op=1` (Sequential) | Host NumPy Buffers |
-| **ONNX Runtime CUDA** | `CUDAExecutionProvider` | CUDA Stream Synchronous | **CUDA IOBinding** (Pre-allocated Device VRAM) |
-| **Direct TensorRT** | Native `tensorrt.Runtime` | Dedicated CUDA Stream (`Stream.synchronize()`) | Direct Buffer Pointers (`execute_async_v3`) |
-
----
-
-## 2. Zero-Copy CUDA IOBinding Mechanics
-
-In standard ONNX Runtime GPU inference, host NumPy arrays are copied across PCIe to GPU memory and copied back to CPU on each forward step. 
-
-The `ORTCUDARuntime` engine implements explicit **CUDA IOBinding**:
-1. Pre-allocates fixed GPU memory tensors for model outputs using `torch.empty(..., device='cuda')`.
-2. Binds GPU device pointers via `io_binding.bind_input` and `io_binding.bind_output`.
-3. Executes kernels directly via `session.run_with_iobinding`.
-4. Eliminates PCIe memory thrashing, enabling true device-resident benchmark timings.
-
----
-
-## 3. Fallback Auditing & Trapping
-
-Silent fallback to CPU during GPU benchmarking corrupts latency measurements. The `FallbackAuditor` (`src/runtimes/fallback_audit.py`) enforces strict validation:
-- Checks `session.get_providers()` upon session creation.
-- Raises `RuntimeError` if a requested GPU provider fails to initialize.
-- Guarantees 0% unmonitored host-fallback during GPU benchmarks.
-
----
-
-## 4. Runtime Validation Audit Status
-
-| Runtime Engine | Evaluated Model | Provider Name | Verification Status |
-| :--- | :--- | :--- | :--- |
-"""
-    for row in summary:
-        md += f"| **{row['runtime']}** | {row['model']} | `{row['provider']}` | `{row['status']}` |\n"
-
-    output_path.write_text(md, encoding="utf-8")
+def render_doc(rows: List[Dict[str, Any]], path: Path) -> None:
+    md = ["# Runtime Backends", "",
+          "Generated by `scripts/validate_runtimes.py` on the benchmark host. Each available backend runs the trained "
+          "detector on a real test image; outputs are compared with PyTorch FP32 on CPU using the precision tier's gate "
+          "from `configs/yolo/<precision>.yaml`. `GATE FAIL` means the backend runs correctly but its output deviates more than the "
+          "precision tier allows; `ERROR` means it could not run.", "",
+          "## Implementation summary", "",
+          "| Backend | Module | Execution details |", "| --- | --- | --- |",
+          "| PyTorch eager | `src/runtimes/pytorch_runtime.py` | `torch.inference_mode()`, CPU threads pinned to the visible core count; CUDA path is asynchronous (no per-call sync) |",
+          "| ONNX Runtime CPU | `src/runtimes/ort_cpu_runtime.py` | `ORT_ENABLE_ALL` graph optimizations, sequential execution, intra-op threads = visible cores, inter-op = 1 |",
+          "| ONNX Runtime CUDA | `src/runtimes/ort_cuda_runtime.py` | IOBinding with pre-allocated device outputs on the PyTorch stream; provider audited at load |",
+          "| TensorRT | `src/runtimes/tensorrt_runtime.py` | Deserialized engine, static-shape device buffers, input copy + `execute_async_v3` ordered on a dedicated stream |",
+          "", "`FallbackAuditor` (`src/runtimes/fallback_audit.py`) raises if a requested ORT provider is not the session's primary "
+          "provider, or if a CUDA PyTorch runtime holds parameters off-device. It does not inspect per-node placement inside a session.",
+          "", "## Status on this host", "", "| Runtime | Precision | Provider | Status | Detail |", "| --- | --- | --- | --- | --- |"]
+    md += [f"| {r['runtime']} | {r['precision'].upper()} | `{r['provider']}` | {r['status']} | {r['detail']} |" for r in rows]
+    path.write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

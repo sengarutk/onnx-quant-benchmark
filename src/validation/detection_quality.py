@@ -35,27 +35,24 @@ def box_iou(boxes1: np.ndarray, boxes2: np.ndarray) -> np.ndarray:
 
 def compute_ap(recall: np.ndarray, precision: np.ndarray) -> float:
     """
-    Computes the 101-point interpolated Average Precision (COCO protocol).
+    101-point interpolated Average Precision (COCO protocol).
+
+    For each recall threshold r in {0, 0.01, ..., 1} the interpolated precision is the maximum precision at any
+    recall >= r, or 0 if recall r is never reached. No precision sentinel is prepended, so a detector without true
+    positives scores exactly 0.
 
     Args:
-        recall: Monotonically increasing recall array.
-        precision: Precision array corresponding to recall values.
-
-    Returns:
-        Interpolated AP float in [0.0, 1.0].
+        recall: Cumulative recall after each score-sorted prediction (non-decreasing).
+        precision: Cumulative precision after each prediction.
     """
-    mrec = np.concatenate(([0.0], recall, [1.0]))
-    mpre = np.concatenate(([1.0], precision, [0.0]))
-
-    # Compute precision envelope (monotonically decreasing from right to left)
-    for i in range(mpre.size - 1, 0, -1):
-        mpre[i - 1] = np.maximum(mpre[i - 1], mpre[i])
-
-    # 101-point standard interpolation grid
-    recall_thresholds = np.linspace(0.0, 1.0, 101)
-    inds = np.searchsorted(mrec, recall_thresholds, side="left")
-    interp_precision = mpre[inds]
-    return float(np.mean(interp_precision))
+    recall = np.asarray(recall, dtype=np.float64)
+    precision = np.asarray(precision, dtype=np.float64)
+    if recall.size == 0:
+        return 0.0
+    envelope = np.maximum.accumulate(precision[::-1])[::-1]
+    inds = np.searchsorted(recall, np.linspace(0.0, 1.0, 101), side="left")
+    interp = np.array([envelope[i] if i < recall.size else 0.0 for i in inds])
+    return float(np.mean(interp))
 
 
 def evaluate_detection_dataset(
@@ -72,7 +69,8 @@ def evaluate_detection_dataset(
         iou_thresholds: IoU sweep thresholds (default: 0.50 to 0.95 with 0.05 step).
 
     Returns:
-        Dictionary with mAP@50, mAP@75, mAP@50-95, mean precision, and mean recall.
+        Dictionary with mAP@50, mAP@75, mAP@50-95, and the class-averaged precision / recall of the full
+        prediction set at IoU 0.50 (i.e. at whatever confidence threshold the predictions were filtered with).
     """
     if iou_thresholds is None:
         iou_thresholds = np.linspace(0.50, 0.95, 10)  # 10 thresholds
@@ -90,6 +88,8 @@ def evaluate_detection_dataset(
         all_classes = {0}
 
     ap_matrix = []  # shape: [num_classes, num_iou_thresholds]
+    final_precisions = []  # precision of the full prediction set at IoU 0.50, per class
+    final_recalls = []  # recall of the full prediction set at IoU 0.50, per class
 
     for cls_id in all_classes:
         class_aps = []
@@ -111,6 +111,8 @@ def evaluate_detection_dataset(
 
         if len(cls_preds) == 0:
             ap_matrix.append([0.0] * len(iou_thresholds))
+            final_precisions.append(0.0)
+            final_recalls.append(0.0)
             continue
 
         # Sort predictions globally by descending confidence score
@@ -151,6 +153,9 @@ def evaluate_detection_dataset(
 
             ap = compute_ap(rec, prec)
             class_aps.append(ap)
+            if len(class_aps) == 1:
+                final_precisions.append(float(prec[-1]))
+                final_recalls.append(float(rec[-1]))
 
         ap_matrix.append(class_aps)
 
@@ -172,6 +177,6 @@ def evaluate_detection_dataset(
         "mAP_50": round(map_50, 4),
         "mAP_75": round(map_75, 4),
         "mAP_50_95": round(map_50_95, 4),
-        "mean_precision": round(map_50, 4),
-        "mean_recall": round(map_50, 4),
+        "mean_precision": round(float(np.mean(final_precisions)), 4),
+        "mean_recall": round(float(np.mean(final_recalls)), 4),
     }

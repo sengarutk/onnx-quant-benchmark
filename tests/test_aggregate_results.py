@@ -1,77 +1,45 @@
-"""
-Unit tests for Result Aggregation & Metrics Normalization Engine.
-"""
+"""Tests for session-scoped aggregation of run records."""
 
 import json
 from pathlib import Path
-import pandas as pd
+import numpy as np
 import pytest
 
-from src.analysis.aggregate_results import aggregate_benchmark_runs
+from src.analysis.aggregate_results import COLUMNS, aggregate_benchmark_runs, list_sessions
+from tests.conftest import make_run_record
 
 
 class TestAggregateResults:
-    """Test suite validating raw manifest aggregation and CSV consolidation."""
+    def test_missing_session_raises(self, tmp_path: Path) -> None:
+        with pytest.raises(FileNotFoundError):
+            aggregate_benchmark_runs(tmp_path / "raw")
 
-    def test_aggregate_empty_dir(self, tmp_path: Path) -> None:
-        """Verifies graceful handling of empty raw results directory."""
-        empty_dir = tmp_path / "raw"
-        empty_dir.mkdir()
-        out_csv = tmp_path / "runs.csv"
+    def test_aggregate_fake_session(self, fake_session, tmp_path: Path) -> None:
+        raw, sid, records = fake_session
+        out = tmp_path / "runs.csv"
+        df = aggregate_benchmark_runs(raw, out)
+        assert out.is_file()
+        assert list(df.columns) == COLUMNS
+        assert len(df) == len(records)
+        assert set(df["session_id"]) == {sid}
+        # PyTorch CPU FP32 row is the speedup baseline for its model
+        base = df[(df["model"] == "yolo_nano") & (df["provider"] == "PyTorch_CPU")].iloc[0]
+        assert np.isclose(base["speedup_model"], 1.0)
+        int8 = df[(df["model"] == "yolo_nano") & (df["precision"] == "int8")].iloc[0]
+        assert np.isclose(int8["speedup_model"], 20.0 / 7.0)
+        assert np.isclose(int8["speedup_vs_runtime_fp32"], 9.0 / 7.0)
+        assert np.isclose(int8["storage_compression_pct"], (1 - 1.9 / 7.3) * 100)
+        assert np.isnan(base["storage_compression_pct"])  # parameter size, not a serialized file
 
-        df = aggregate_benchmark_runs(empty_dir, out_csv)
-        assert isinstance(df, pd.DataFrame)
-        assert df.empty
-        assert out_csv.is_file()
-
-    def test_aggregate_valid_manifests(self, tmp_path: Path) -> None:
-        """Verifies proper ingestion, flattening, and derivation computation."""
-        raw_dir = tmp_path / "raw"
-        out_csv = tmp_path / "runs.csv"
-
-        # Create mock baseline manifest (PyTorch FP32 CPU)
-        run1_dir = raw_dir / "yolo_nano_PyTorch_fp32"
-        run1_dir.mkdir(parents=True)
-        manifest1 = {
-            "run_id": "yolo_nano_PyTorch_fp32",
-            "model_name": "yolo_nano",
-            "task": "detection",
-            "runtime_name": "PyTorch",
-            "provider": "PyTorch_CPU",
-            "precision": "fp32",
-            "model_path_latency_ms": {"p50_ms": 20.0, "p90_ms": 22.0, "p95_ms": 25.0, "p99_ms": 30.0, "model_throughput_fps": 50.0},
-            "end_to_end_latency_ms": {"p50_e2e_ms": 25.0, "p90_e2e_ms": 28.0, "p95_e2e_ms": 32.0, "p99_e2e_ms": 35.0, "e2e_throughput_fps": 40.0},
-            "memory_profile": {"peak_vram_allocated_mb": 0.0, "process_rss_mb": 200.0},
-            "model_metadata": {"model_size_mb": 10.0},
-            "quality_evaluation": {"metric_name": "mAP_50", "metric_value": 0.35, "metric_delta": 0.0, "passed": True},
-            "stability_assessment": {"is_stable": True, "cv_p50": 0.02, "total_sessions": 5},
-        }
-        (run1_dir / "run.json").write_text(json.dumps(manifest1))
-
-        # Create mock candidate manifest (ORT CPU INT8)
-        run2_dir = raw_dir / "yolo_nano_ORT_CPU_int8"
-        run2_dir.mkdir(parents=True)
-        manifest2 = {
-            "run_id": "yolo_nano_ORT_CPU_int8",
-            "model_name": "yolo_nano",
-            "task": "detection",
-            "runtime_name": "ORT_CPU",
-            "provider": "CPUExecutionProvider",
-            "precision": "int8",
-            "model_path_latency_ms": {"p50_ms": 5.0, "p90_ms": 6.0, "p95_ms": 7.0, "p99_ms": 8.0, "model_throughput_fps": 200.0},
-            "end_to_end_latency_ms": {"p50_e2e_ms": 10.0, "p90_e2e_ms": 12.0, "p95_e2e_ms": 14.0, "p99_e2e_ms": 16.0, "e2e_throughput_fps": 100.0},
-            "memory_profile": {"peak_vram_allocated_mb": 0.0, "process_rss_mb": 150.0},
-            "model_metadata": {"model_size_mb": 2.5},
-            "quality_evaluation": {"metric_name": "mAP_50", "metric_value": 0.34, "metric_delta": -0.01, "passed": True},
-            "stability_assessment": {"is_stable": True, "cv_p50": 0.01, "total_sessions": 5},
-        }
-        (run2_dir / "run.json").write_text(json.dumps(manifest2))
-
-        df = aggregate_benchmark_runs(raw_dir, out_csv)
-        assert len(df) == 2
-        assert out_csv.is_file()
-
-        # Check calculated speedup and storage compression
-        cand_row = df[df["run_id"] == "yolo_nano_ORT_CPU_int8"].iloc[0]
-        assert cand_row["speedup_model"] == 4.0  # 20.0 / 5.0
-        assert cand_row["storage_compression_pct"] == 75.0  # (1 - 2.5/10.0) * 100
+    def test_latest_full_session_selected_and_quick_ignored(self, fake_session) -> None:
+        raw, sid, _ = fake_session
+        newer = "session_20261027T000000Z"
+        rec = make_run_record("yolo_nano", "PyTorch", "PyTorch_CPU", "fp32", 5.0, newer, 7.3, 0.8, 0.8)
+        (raw / newer / rec["run_id"]).mkdir(parents=True)
+        (raw / newer / rec["run_id"] / "run.json").write_text(json.dumps(rec))
+        (raw / newer / "session.json").write_text(json.dumps({"session_id": newer, "quick": True}))
+        assert [p.name for p in list_sessions(raw)] == [sid]
+        assert aggregate_benchmark_runs(raw)["session_id"].iloc[0] == sid
+        df_quick = aggregate_benchmark_runs(raw, include_quick=True)
+        assert len(df_quick) == 1 and df_quick["session_id"].iloc[0] == newer
+        assert aggregate_benchmark_runs(raw, session_id=sid)["session_id"].iloc[0] == sid

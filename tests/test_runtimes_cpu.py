@@ -27,7 +27,7 @@ class TestRuntimesCPU:
         out = runtime.predict({"images": dummy_in})
 
         assert "output0" in out
-        assert out["output0"].shape == (1, 84, 8400)
+        assert out["output0"].shape == (1, 6, 8400)
         assert isinstance(out["output0"], np.ndarray)
         assert "images" in runtime.get_input_spec()
         assert "output0" in runtime.get_output_spec()
@@ -61,7 +61,7 @@ class TestRuntimesCPU:
         out = runtime.predict({"images": dummy_in})
 
         assert "output0" in out
-        assert out["output0"].shape == (1, 84, 8400)
+        assert out["output0"].shape == (1, 6, 8400)
 
         runtime.cleanup()
 

@@ -1,0 +1,12 @@
+\begin{tabular}{llrrrrrr}
+\toprule
+\textbf{Target} & \textbf{Thr.} & \textbf{Matched} & $\Phi$ & \textbf{Lost TP} & \textbf{New TP} & \textbf{New FP} & \textbf{Supp. FP} \\
+\midrule
+ORT FP32 (CPU) & default & 14185 & 0.000 & 0 & 0 & 0 & 0 \\
+ORT FP32 (CPU) & calibrated & 731 & 0.000 & 0 & 0 & 0 & 0 \\
+ORT FP16 (CPU) & default & 14143 & 0.006 & 0 & 1 & 49 & 42 \\
+ORT FP16 (CPU) & calibrated & 731 & 0.000 & 0 & 0 & 0 & 0 \\
+ORT INT8 (CPU) & default & 9854 & 0.490 & 18 & 10 & 5134 & 4313 \\
+ORT INT8 (CPU) & calibrated & 604 & 0.273 & 11 & 38 & 62 & 116 \\
+\bottomrule
+\end{tabular}

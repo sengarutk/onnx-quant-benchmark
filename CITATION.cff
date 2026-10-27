@@ -1,19 +1,22 @@
 cff-version: 1.2.0
-message: "If you use this benchmark suite or methodology in your research or edge deployment, please cite it as below."
-title: "ONNX Runtime Edge Inference and Static INT8 PTQ Benchmark Suite: A Systematic Study of Edge Deployment Trade-offs"
+message: "If you use this benchmark suite, please cite it as below."
+title: "ONNX Edge Inference Benchmark: PyTorch vs ONNX Runtime FP32/FP16/INT8 with Quantization-Aware Post-Processing"
 authors:
   - family-names: "Sengar"
-    given-names: "Ayush"
-version: 1.1.0
-date-released: 2026-09-03
-url: "https://github.com/ayushsengar/onnx-edge-inference-benchmark"
+    given-names: "Utkarsh"
+    affiliation: "Indian Institute of Technology Dharwad"
+version: 2.0.0
+date-released: 2026-10-27
+repository-code: "https://github.com/sengarutk/onnx-quant-benchmark"
+url: "https://github.com/sengarutk/onnx-quant-benchmark"
+license: Apache-2.0
 keywords:
-  - "deep-learning"
-  - "onnx"
-  - "onnx-runtime"
-  - "quantization"
-  - "int8"
-  - "fp16"
-  - "edge-computing"
-  - "benchmarking"
-license: "Apache-2.0"
+  - onnx
+  - onnx-runtime
+  - quantization
+  - int8
+  - fp16
+  - edge-inference
+  - benchmarking
+  - object-detection
+  - anomaly-detection

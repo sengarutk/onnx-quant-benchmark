@@ -26,6 +26,8 @@ def setup_logger(
     """
     logger = logging.getLogger(name)
     logger.setLevel(level)
+    # Do not also emit through the root logger (some libraries call logging.basicConfig()).
+    logger.propagate = False
 
     # Avoid adding duplicate handlers if logger was already configured
     if logger.handlers:

@@ -1,11 +1,13 @@
 """
-Publication-Grade Visualization Engine (300 DPI Matplotlib Figures).
+Publication figures (300 DPI) generated from one benchmark session. Every plotted quantity is a measured value
+from results/runs.csv or the session's run records.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List
 import matplotlib
-matplotlib.use("Agg")  # Force non-interactive backend for headless environments
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -15,7 +17,6 @@ from src.common.logging import setup_logger
 
 logger = setup_logger("plots")
 
-# Set global publication typography and theme defaults
 plt.rcParams.update({
     "font.family": "sans-serif",
     "font.sans-serif": ["DejaVu Sans", "Helvetica", "Arial"],
@@ -25,353 +26,228 @@ plt.rcParams.update({
     "xtick.labelsize": 9,
     "ytick.labelsize": 9,
     "legend.fontsize": 9,
-    "figure.titlesize": 13,
 })
+
+MODELS = [("yolo_nano", "Detector (YOLO-Nano-style)", "mAP@50"),
+          ("industrial_autoencoder", "Conv. autoencoder", "Image AUROC")]
+RUNTIME_COLORS = {"PyTorch": "#1f77b4", "ORT_CPU": "#ff7f0e", "ORT_CUDA": "#2ca02c", "TensorRT": "#d62728"}
+PRECISION_MARKERS = {"fp32": "o", "fp16": "^", "int8": "s"}
+
+
+def config_label(r: pd.Series, with_model: bool = False) -> str:
+    dev = "GPU" if any(k in str(r["provider"]).upper() for k in ("CUDA", "TENSORRT")) else "CPU"
+    rt = {"PyTorch": "PyTorch", "ORT_CPU": "ORT", "ORT_CUDA": "ORT", "TensorRT": "TensorRT"}.get(r["runtime"], r["runtime"])
+    lbl = f"{rt} {dev} {str(r['precision']).upper()}"
+    return f"{'YOLO' if r['model'] == 'yolo_nano' else 'AE'} | {lbl}" if with_model else lbl
+
+
+def _empty(fig_path: Path, msg: str) -> Path:
+    fig, ax = plt.subplots(figsize=(8, 4), dpi=300)
+    ax.text(0.5, 0.5, msg, ha="center", va="center")
+    ax.axis("off")
+    fig.savefig(fig_path, bbox_inches="tight", dpi=300)
+    plt.close(fig)
+    return fig_path
 
 
 def plot_pareto_frontier(df: pd.DataFrame, output_dir: Path) -> Path:
-    """
-    Renders 300 DPI dual-panel Pareto efficiency plot (Quality vs E2E Latency).
-    """
+    """Task quality vs model-path p50 latency (95% CI error bars) with the non-dominated frontier."""
     output_dir.mkdir(parents=True, exist_ok=True)
     fig_path = output_dir / "pareto_quality_vs_latency.png"
+    if df.empty:
+        return _empty(fig_path, "No benchmark data available")
 
-    if df.empty or "model" not in df.columns:
-        fig, ax = plt.subplots(figsize=(8, 4), dpi=300)
-        ax.text(0.5, 0.5, "No benchmark data available", ha="center", va="center")
-        fig.savefig(fig_path, bbox_inches="tight", dpi=300)
-        plt.close(fig)
-        return fig_path
-
-    fig, axes = plt.subplots(2, 1, figsize=(10, 11), dpi=300)
-
-    models = [("yolo_nano", "YOLO Nano Detector (Task: Detection)", "mAP@50", axes[0]),
-              ("industrial_autoencoder", "Industrial Autoencoder (Task: Anomaly)", "Image AUROC", axes[1])]
-
-    colors = {"PyTorch": "#1f77b4", "ORT_CPU": "#ff7f0e", "ORT_CUDA": "#2ca02c", "TensorRT": "#d62728"}
-    markers = {"fp32": "o", "fp16": "^", "int8": "s"}
-
-    for model_key, title, metric_label, ax in models:
-        sub_df = df[df["model"] == model_key].copy()
-        if sub_df.empty:
-            ax.text(0.5, 0.5, f"No benchmark data for {model_key}", ha="center", va="center")
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5), dpi=300)
+    for ax, (model, title, metric) in zip(axes, MODELS):
+        sub = df[df["model"] == model]
+        if sub.empty:
             ax.set_title(title)
             continue
-
-        # Plot candidate configurations
-        for _, row in sub_df.iterrows():
-            rt = str(row["runtime"])
-            prec = str(row["precision"])
-            col = colors.get(rt, "#333333")
-            mk = markers.get(prec, "o")
-            x = float(row["p50_e2e_ms"])
-            y = float(row["quality_value"])
-            ax.scatter(x, y, color=col, marker=mk, s=90, edgecolors="black", alpha=0.85, zorder=4)
-            label = f"{rt} {prec.upper()}"
-            ax.annotate(label, (x, y), textcoords="offset points", xytext=(0, 7), ha="center", fontsize=8)
-
-        # Identify & Draw Pareto Frontier
-        pareto = identify_pareto_frontier(sub_df, objective_x="p50_e2e_ms", objective_y="quality_value", minimize_x=True, maximize_y=True)
-        if len(pareto) > 1:
-            px = pareto["p50_e2e_ms"].tolist()
-            py = pareto["quality_value"].tolist()
-            ax.plot(px, py, linestyle="--", color="#e74c3c", linewidth=2.0, alpha=0.9, label="Pareto Frontier", zorder=3)
-
-        ax.set_title(title, fontweight="bold", pad=10)
-        ax.set_xlabel("End-to-End Latency $p_{50}$ (ms)", fontweight="bold")
-        ax.set_ylabel(metric_label, fontweight="bold")
-        ax.grid(True, linestyle=":", alpha=0.6)
-        if len(pareto) > 1:
+        for _, r in sub.iterrows():
+            x, y = float(r["p50_model_ms"]), float(r["quality_value"])
+            xerr = [[x - r["p50_model_ci_low_ms"]], [r["p50_model_ci_high_ms"] - x]]
+            ax.errorbar(x, y, xerr=xerr, fmt=PRECISION_MARKERS.get(r["precision"], "o"), ms=8,
+                        color=RUNTIME_COLORS.get(r["runtime"], "#333"), mec="black", capsize=3, zorder=4)
+            ax.annotate(config_label(r), (x, y), textcoords="offset points", xytext=(5, 6), fontsize=7.5)
+        front = identify_pareto_frontier(sub, "p50_model_ms", "quality_value", minimize_x=True, maximize_y=True)
+        if len(front) > 1:
+            ax.plot(front["p50_model_ms"], front["quality_value"], "--", color="#e74c3c", lw=1.5, label="Pareto frontier", zorder=3)
             ax.legend(loc="lower right")
-
-    plt.tight_layout()
+        ax.set_xscale("log")
+        ax.set_title(title, fontweight="bold")
+        ax.set_xlabel("Model-path latency p50 (ms, log scale)")
+        ax.set_ylabel(f"{metric} (test split)")
+        ax.grid(True, ls=":", alpha=0.6)
+    fig.suptitle("Task quality vs. latency (batch 1; markers: o FP32, ^ FP16, s INT8)", fontweight="bold")
+    fig.tight_layout()
     fig.savefig(fig_path, bbox_inches="tight", dpi=300)
     plt.close(fig)
-    logger.info(f"Rendered Pareto plot: {fig_path}")
     return fig_path
 
 
 def plot_latency_breakdown(df: pd.DataFrame, output_dir: Path) -> Path:
-    """
-    Renders stacked horizontal bar chart: Preprocess vs. Model Path vs. Postprocess/NMS Latencies.
-    """
+    """Measured end-to-end stage medians: decode+preprocess, inference (incl. host<->device copies), postprocess."""
     output_dir.mkdir(parents=True, exist_ok=True)
     fig_path = output_dir / "latency_breakdown_stacked.png"
-
     if df.empty:
-        fig, ax = plt.subplots(figsize=(8, 4), dpi=300)
-        ax.text(0.5, 0.5, "No data available", ha="center", va="center")
-        fig.savefig(fig_path, bbox_inches="tight", dpi=300)
-        plt.close(fig)
-        return fig_path
+        return _empty(fig_path, "No data available")
 
-    fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
-
-    # Estimate preprocess & postprocess components
-    labels = []
-    prep_ms = []
-    model_ms = []
-    post_ms = []
-
-    for _, r in df.iterrows():
-        lbl = f"{r['model']}\n{r['runtime']}_{r['precision']}"
-        labels.append(lbl)
-        m = float(r["p50_model_ms"])
-        e = float(r["p50_e2e_ms"])
-        overhead = max(0.0, e - m)
-        # Allocate 60% overhead to preprocess, 40% to postprocess/NMS
-        p_in = overhead * 0.60
-        p_out = overhead * 0.40
-        prep_ms.append(p_in)
-        model_ms.append(m)
-        post_ms.append(p_out)
-
+    labels = [config_label(r, with_model=True) for _, r in df.iterrows()]
+    pre, inf, post = df["stage_preprocess_ms"].to_numpy(), df["stage_inference_ms"].to_numpy(), df["stage_postprocess_ms"].to_numpy()
     y = np.arange(len(labels))
-    width = 0.55
-
-    ax.barh(y, prep_ms, width, label="Preprocessing / H2D Copy", color="#3498db", alpha=0.85, edgecolor="black")
-    ax.barh(y, model_ms, width, left=prep_ms, label="Model Path Compute", color="#2ecc71", alpha=0.85, edgecolor="black")
-    left_post = [p + m for p, m in zip(prep_ms, model_ms)]
-    ax.barh(y, post_ms, width, left=left_post, label="Postprocessing / NMS", color="#e67e22", alpha=0.85, edgecolor="black")
-
+    fig, ax = plt.subplots(figsize=(10, 0.45 * len(labels) + 1.5), dpi=300)
+    ax.barh(y, pre, 0.6, label="Decode + preprocess", color="#3498db", edgecolor="black")
+    ax.barh(y, inf, 0.6, left=pre, label="Inference (incl. H2D/D2H)", color="#2ecc71", edgecolor="black")
+    ax.barh(y, post, 0.6, left=pre + inf, label="Postprocess (NMS / anomaly score)", color="#e67e22", edgecolor="black")
     ax.set_yticks(y)
-    ax.set_yticklabels(labels, fontsize=8.5)
+    ax.set_yticklabels(labels, fontsize=8)
     ax.invert_yaxis()
-    ax.set_xlabel("End-to-End Latency $p_{50}$ (ms)", fontweight="bold")
-    ax.set_title("Latency Stage Decomposition (Preprocess, Compute, Postprocess)", fontweight="bold", pad=12)
+    ax.set_xlabel("Per-stage median latency (ms)")
+    ax.set_title("Measured end-to-end stage breakdown (batch 1)", fontweight="bold")
     ax.legend(loc="lower right")
-    ax.grid(True, linestyle=":", alpha=0.5, axis="x")
-
-    plt.tight_layout()
+    ax.grid(True, ls=":", alpha=0.5, axis="x")
+    fig.tight_layout()
     fig.savefig(fig_path, bbox_inches="tight", dpi=300)
     plt.close(fig)
-    logger.info(f"Rendered Latency Breakdown: {fig_path}")
     return fig_path
 
 
 def plot_speedup_barchart(df: pd.DataFrame, output_dir: Path) -> Path:
-    """
-    Renders grouped bar chart comparing Model-Path speedups relative to CPU PyTorch FP32.
-    """
+    """Model-path speedup relative to PyTorch FP32 on CPU, one panel per model."""
     output_dir.mkdir(parents=True, exist_ok=True)
     fig_path = output_dir / "speedup_comparison.png"
-
     if df.empty:
-        fig, ax = plt.subplots(figsize=(8, 4), dpi=300)
-        ax.text(0.5, 0.5, "No data available", ha="center", va="center")
-        fig.savefig(fig_path, bbox_inches="tight", dpi=300)
-        plt.close(fig)
-        return fig_path
+        return _empty(fig_path, "No data available")
 
-    fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
-
-    groups = df.groupby(["model", "runtime", "precision"])["speedup_model"].mean().reset_index()
-    labels = [f"{r['runtime']}\n({r['precision'].upper()})" for _, r in groups.iterrows()]
-    speedups = groups["speedup_model"].tolist()
-
-    x = np.arange(len(labels))
-    colors = ["#2ecc71" if s >= 1.0 else "#e74c3c" for s in speedups]
-
-    bars = ax.bar(x, speedups, color=colors, width=0.6, edgecolor="black", alpha=0.85)
-    ax.axhline(1.0, color="gray", linestyle="--", linewidth=1.2, label="PyTorch CPU Baseline (1.0x)")
-
-    for bar, val in zip(bars, speedups):
-        yval = bar.get_height()
-        ax.text(bar.get_x() + bar.get_width() / 2.0, yval + 0.05, f"{val:.1f}x", ha="center", va="bottom", fontsize=8.5, fontweight="bold")
-
-    ax.set_xticks(x)
-    ax.set_xticklabels(labels, rotation=0, fontsize=8.5)
-    ax.set_ylabel("Speedup Factor ($t_{\\rm baseline} / t_{\\rm candidate}$)", fontweight="bold")
-    ax.set_title("Model Compute Speedup vs. CPU PyTorch FP32 Baseline", fontweight="bold", pad=12)
-    ax.legend(loc="upper left")
-    ax.grid(True, linestyle=":", alpha=0.5, axis="y")
-
-    plt.tight_layout()
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5), dpi=300)
+    for ax, (model, title, _) in zip(axes, MODELS):
+        sub = df[df["model"] == model]
+        labels = [config_label(r) for _, r in sub.iterrows()]
+        vals = sub["speedup_model"].to_numpy(dtype=float)
+        x = np.arange(len(labels))
+        bars = ax.bar(x, vals, color=["#2ecc71" if v >= 1 else "#e74c3c" for v in vals], edgecolor="black")
+        ax.axhline(1.0, color="gray", ls="--", lw=1.2)
+        for b, v in zip(bars, vals):
+            ax.text(b.get_x() + b.get_width() / 2, b.get_height(), f"{v:.2f}x", ha="center", va="bottom", fontsize=8)
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, rotation=30, ha="right", fontsize=8)
+        ax.set_title(title, fontweight="bold")
+        ax.set_ylabel("Speedup vs PyTorch FP32 CPU (p50 ratio)")
+        ax.grid(True, ls=":", alpha=0.5, axis="y")
+    fig.tight_layout()
     fig.savefig(fig_path, bbox_inches="tight", dpi=300)
     plt.close(fig)
-    logger.info(f"Rendered Speedup Comparison: {fig_path}")
     return fig_path
 
 
 def plot_tail_latencies(df: pd.DataFrame, output_dir: Path) -> Path:
-    """
-    Renders scatter plot of p50 vs p95 highlighting tail variance and jitter.
-    """
+    """p95/p50 and p99/p50 tail ratios of the pooled model-path latencies."""
     output_dir.mkdir(parents=True, exist_ok=True)
     fig_path = output_dir / "tail_latency_p50_p95.png"
-
     if df.empty:
-        fig, ax = plt.subplots(figsize=(8, 4), dpi=300)
-        ax.text(0.5, 0.5, "No data available", ha="center", va="center")
-        fig.savefig(fig_path, bbox_inches="tight", dpi=300)
-        plt.close(fig)
-        return fig_path
+        return _empty(fig_path, "No data available")
 
-    fig, ax = plt.subplots(figsize=(8, 8), dpi=300)
-
-    p50 = df["p50_model_ms"].to_numpy(dtype=np.float64)
-    p95 = df["p95_model_ms"].to_numpy(dtype=np.float64)
-
-    max_val = max(1.0, float(np.max(p95)) * 1.15) if len(p95) > 0 else 10.0
-
-    ax.scatter(p50, p95, c="#9b59b6", s=80, edgecolors="black", alpha=0.85, zorder=4)
-    ax.plot([0, max_val], [0, max_val], color="gray", linestyle="--", linewidth=1.2, label="$y = x$ (Zero Tail Jitter)", zorder=2)
-
-    for _, row in df.iterrows():
-        x = float(row["p50_model_ms"])
-        y = float(row["p95_model_ms"])
-        lbl = f"{row['runtime']}_{row['precision']}"
-        ax.annotate(lbl, (x, y), textcoords="offset points", xytext=(4, 4), fontsize=8)
-
-    ax.set_xlim(0, max_val)
-    ax.set_ylim(0, max_val)
-    ax.set_xlabel("Median Model Latency $p_{50}$ (ms)", fontweight="bold")
-    ax.set_ylabel("Tail Model Latency $p_{95}$ (ms)", fontweight="bold")
-    ax.set_title("Tail Latency & Variance Inspection ($p_{50}$ vs $p_{95}$)", fontweight="bold", pad=12)
-    ax.legend(loc="upper left")
-    ax.grid(True, linestyle=":", alpha=0.6)
-
-    plt.tight_layout()
+    labels = [config_label(r, with_model=True) for _, r in df.iterrows()]
+    r95 = (df["p95_model_ms"] / df["p50_model_ms"]).to_numpy()
+    r99 = (df["p99_model_ms"] / df["p50_model_ms"]).to_numpy()
+    y = np.arange(len(labels))
+    fig, ax = plt.subplots(figsize=(10, 0.45 * len(labels) + 1.5), dpi=300)
+    ax.barh(y - 0.2, r95, 0.4, label="p95 / p50", color="#9b59b6", edgecolor="black")
+    ax.barh(y + 0.2, r99, 0.4, label="p99 / p50", color="#34495e", edgecolor="black")
+    ax.axvline(1.0, color="gray", ls="--", lw=1)
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels, fontsize=8)
+    ax.invert_yaxis()
+    ax.set_xlabel("Tail-to-median latency ratio (pooled over sessions)")
+    ax.set_title("Model-path tail latency", fontweight="bold")
+    ax.legend(loc="lower right")
+    ax.grid(True, ls=":", alpha=0.5, axis="x")
+    fig.tight_layout()
     fig.savefig(fig_path, bbox_inches="tight", dpi=300)
     plt.close(fig)
-    logger.info(f"Rendered Tail Latency Scatter: {fig_path}")
     return fig_path
 
 
 def plot_memory_footprints(df: pd.DataFrame, output_dir: Path) -> Path:
-    """
-    Renders grouped comparison of Peak Active VRAM vs. Serialized Model File Size.
-    """
+    """Serialized artifact size per precision and peak PyTorch CUDA allocation."""
     output_dir.mkdir(parents=True, exist_ok=True)
     fig_path = output_dir / "memory_vs_footprint.png"
-
     if df.empty:
-        fig, ax = plt.subplots(figsize=(8, 4), dpi=300)
-        ax.text(0.5, 0.5, "No data available", ha="center", va="center")
-        fig.savefig(fig_path, bbox_inches="tight", dpi=300)
-        plt.close(fig)
-        return fig_path
+        return _empty(fig_path, "No data available")
 
-    fig, ax = plt.subplots(figsize=(10, 5.5), dpi=300)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 4.8), dpi=300)
+    files = df[(df["model_size_source"] == "serialized_file") & (df["runtime"] == "ORT_CPU")]
+    labels = [f"{'YOLO' if r['model'] == 'yolo_nano' else 'AE'} {str(r['precision']).upper()}" for _, r in files.iterrows()]
+    bars = ax1.bar(np.arange(len(labels)), files["model_size_mb"], color="#34495e", edgecolor="black")
+    for b, v in zip(bars, files["model_size_mb"]):
+        ax1.text(b.get_x() + b.get_width() / 2, b.get_height(), f"{v:.2f}", ha="center", va="bottom", fontsize=8)
+    ax1.set_xticks(np.arange(len(labels)))
+    ax1.set_xticklabels(labels, rotation=20, ha="right")
+    ax1.set_ylabel("ONNX file size (MB)")
+    ax1.set_title("Serialized model size", fontweight="bold")
+    ax1.grid(True, ls=":", alpha=0.5, axis="y")
 
-    labels = [f"{r['model']}\n{r['runtime']}_{r['precision']}" for _, r in df.iterrows()]
-    x = np.arange(len(labels))
-    width = 0.35
-
-    vram = df["peak_vram_mb"].tolist()
-    size = df["model_size_mb"].tolist()
-
-    rects1 = ax.bar(x - width/2, vram, width, label="Peak VRAM (MB)", color="#e74c3c", alpha=0.85, edgecolor="black")
-    rects2 = ax.bar(x + width/2, size, width, label="Model File Size (MB)", color="#34495e", alpha=0.85, edgecolor="black")
-
-    ax.set_ylabel("Megabytes (MB)", fontweight="bold")
-    ax.set_title("Memory Allocations & Storage Footprint Across Configurations", fontweight="bold", pad=12)
-    ax.set_xticks(x)
-    ax.set_xticklabels(labels)
-    plt.xticks(rotation=25, ha="right", fontsize=8)
-    ax.legend(loc="upper right")
-    ax.grid(True, linestyle=":", alpha=0.5, axis="y")
-
-    plt.subplots_adjust(bottom=0.22)
+    gpu = df[(df["runtime"] == "PyTorch") & df["provider"].str.contains("CUDA")]
+    if gpu.empty:
+        ax2.text(0.5, 0.5, "No PyTorch CUDA runs in this session", ha="center", va="center")
+        ax2.axis("off")
+    else:
+        labels = [config_label(r, with_model=True) for _, r in gpu.iterrows()]
+        bars = ax2.bar(np.arange(len(labels)), gpu["peak_vram_mb"], color="#e74c3c", edgecolor="black")
+        for b, v in zip(bars, gpu["peak_vram_mb"]):
+            ax2.text(b.get_x() + b.get_width() / 2, b.get_height(), f"{v:.1f}", ha="center", va="bottom", fontsize=8)
+        ax2.set_xticks(np.arange(len(labels)))
+        ax2.set_xticklabels(labels, rotation=20, ha="right", fontsize=8)
+        ax2.set_ylabel("Peak torch.cuda.max_memory_allocated (MB)")
+        ax2.set_title("Peak PyTorch CUDA allocation", fontweight="bold")
+        ax2.grid(True, ls=":", alpha=0.5, axis="y")
+    fig.tight_layout()
     fig.savefig(fig_path, bbox_inches="tight", dpi=300)
     plt.close(fig)
-    logger.info(f"Rendered Memory Footprint: {fig_path}")
     return fig_path
 
 
-def plot_stability_trends(raw_results_dir: Path, output_dir: Path) -> Path:
-    """
-    Renders multi-session p50 tracking across Session 1 to Session 5 illustrating statistical stability.
-    Deduplicates legend entries to unique model/runtime combinations (maximum 4 entries:
-    YOLO PyTorch, YOLO ORT, Autoencoder PyTorch, Autoencoder ORT) with loc='upper right' and ncol=2.
-    """
+def plot_stability_trends(records: List[Dict[str, Any]], output_dir: Path) -> Path:
+    """Per-session median latency normalized by each configuration's median-of-sessions."""
     output_dir.mkdir(parents=True, exist_ok=True)
     fig_path = output_dir / "stability_variance_trends.png"
+    if not records:
+        return _empty(fig_path, "No multi-session stability data found")
 
-    fig, ax = plt.subplots(figsize=(10, 6), dpi=300)
-
-    workload_styles = {
-        "YOLO PyTorch": {"color": "#1f77b4", "marker": "o"},
-        "YOLO ORT": {"color": "#ff7f0e", "marker": "s"},
-        "Autoencoder PyTorch": {"color": "#2ca02c", "marker": "^"},
-        "Autoencoder ORT": {"color": "#d62728", "marker": "d"},
-    }
-
-    unique_trends = {}
-    for run_file in sorted(raw_results_dir.rglob("run.json")):
-        try:
-            import json
-            data = json.loads(run_file.read_text(encoding="utf-8"))
-            stab = data.get("stability_assessment", {}) or data.get("stability_audit", {})
-            sess_vals = stab.get("session_p50_values", [])
-            if len(sess_vals) >= 3:
-                model_meta = data.get("model_metadata", {})
-                runtime_meta = data.get("runtime_metadata", {})
-                m = str(model_meta.get("model", data.get("model", ""))).lower()
-                r = str(runtime_meta.get("runtime", data.get("runtime", ""))).lower()
-
-                if "yolo" in m:
-                    m_name = "YOLO"
-                elif "autoencoder" in m or "cae" in m or "conv" in m:
-                    m_name = "Autoencoder"
-                else:
-                    continue
-
-                if "pytorch" in r:
-                    r_name = "PyTorch"
-                elif "ort" in r:
-                    r_name = "ORT"
-                else:
-                    continue
-
-                canonical_label = f"{m_name} {r_name}"
-                if canonical_label not in unique_trends:
-                    unique_trends[canonical_label] = sess_vals
-        except Exception:
-            pass
-
-    trend_plotted = False
-    for label, style in workload_styles.items():
-        if label in unique_trends:
-            sess_vals = unique_trends[label]
-            x_sess = np.arange(1, len(sess_vals) + 1)
-            ax.plot(
-                x_sess,
-                sess_vals,
-                marker=style["marker"],
-                color=style["color"],
-                linewidth=2.0,
-                markersize=7,
-                label=label,
-                alpha=0.9,
-            )
-            trend_plotted = True
-
-    if not trend_plotted:
-        ax.text(0.5, 0.5, "No multi-session stability data found", ha="center", va="center")
-
-    ax.set_xlabel("Measurement Session Index", fontweight="bold")
-    ax.set_ylabel("Median Latency $p_{50}$ (ms)", fontweight="bold")
-    ax.set_title("Multi-Session Latency Drift & Stability Assessment", fontweight="bold", pad=12)
-    if trend_plotted:
-        ax.legend(loc="upper right", ncol=2, frameon=True, fontsize=9)
-    ax.grid(True, linestyle=":", alpha=0.5)
-
-    plt.tight_layout(rect=[0, 0.02, 1, 0.96])
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5), dpi=300, sharey=True)
+    cmap = plt.get_cmap("tab10")
+    for ax, (model, title, _) in zip(axes, MODELS):
+        recs = [r for r in records if r["model_metadata"]["model"] == model]
+        max_sessions = 1
+        for i, rec in enumerate(recs):
+            vals = np.asarray(rec["stability_audit"]["session_p50_values"], dtype=float)
+            max_sessions = max(max_sessions, len(vals))
+            row = pd.Series({"model": model, "runtime": rec["runtime_metadata"]["runtime"],
+                             "provider": rec["runtime_metadata"]["provider"], "precision": rec["model_metadata"]["precision"]})
+            cv = rec["stability_audit"]["cv_p50"]
+            ax.plot(np.arange(1, len(vals) + 1), vals / np.median(vals), marker="os^Dvx"[i % 6], color=cmap(i % 10),
+                    lw=1.5, alpha=0.9, label=f"{config_label(row)} (CV {cv:.3f})")
+        ax.axhspan(0.95, 1.05, color="gray", alpha=0.12, label="+/-5% band")
+        ax.set_xticks(np.arange(1, max_sessions + 1))
+        ax.set_title(title, fontweight="bold")
+        ax.set_xlabel("Measurement session")
+        ax.grid(True, ls=":", alpha=0.5)
+        ax.legend(fontsize=7, loc="upper left", ncol=1)
+    axes[0].set_ylabel("Session p50 / median of session p50s")
+    fig.suptitle("Session-to-session latency stability", fontweight="bold")
+    fig.tight_layout()
     fig.savefig(fig_path, bbox_inches="tight", dpi=300)
     plt.close(fig)
-    logger.info(f"Rendered Stability Trends: {fig_path}")
     return fig_path
 
 
-def plot_all_figures(df: pd.DataFrame, raw_results_dir: Path, output_dir: Path) -> List[Path]:
-    """Generates all 6 publication-grade figures in results/figures/."""
-    figures = [
+def plot_all_figures(df: pd.DataFrame, records: List[Dict[str, Any]], output_dir: Path) -> List[Path]:
+    """Generates the six session figures."""
+    return [
         plot_pareto_frontier(df, output_dir),
         plot_latency_breakdown(df, output_dir),
         plot_speedup_barchart(df, output_dir),
         plot_tail_latencies(df, output_dir),
         plot_memory_footprints(df, output_dir),
-        plot_stability_trends(raw_results_dir, output_dir),
+        plot_stability_trends(records, output_dir),
     ]
-    return figures

@@ -61,3 +61,12 @@ class TestStatsCI:
         """Asserts mismatched array lengths raise ValueError."""
         with pytest.raises(ValueError, match="equal length"):
             wilcoxon_paired_test([1, 2], [1, 2, 3])
+
+
+def test_holm_bonferroni_step_down() -> None:
+    from src.analysis.stats import holm_bonferroni
+    res = holm_bonferroni({"a": 0.01, "b": 0.04, "c": 0.03})
+    # sorted p: a=0.01 (x3=0.03), c=0.03 (x2=0.06), b=0.04 (x1=0.04 -> monotone 0.06)
+    assert res["a"]["reject"] is True and abs(res["a"]["p_adjusted"] - 0.03) < 1e-12
+    assert res["c"]["reject"] is False and abs(res["c"]["p_adjusted"] - 0.06) < 1e-12
+    assert res["b"]["reject"] is False and abs(res["b"]["p_adjusted"] - 0.06) < 1e-12

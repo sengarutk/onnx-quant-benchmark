@@ -3,7 +3,7 @@ from src.benchmarking.timer import ModelPathTimer, EndToEndTimer
 from src.benchmarking.memory import MemoryProfiler, get_artifact_size_mb
 from src.benchmarking.stability import StabilityAnalyzer
 from src.benchmarking.throughput import compute_throughput
-from src.benchmarking.benchmark_suite import BenchmarkSuite, init_master_csv
+from src.benchmarking.benchmark_suite import BenchmarkSuite, new_session_id
 
 __all__ = [
     "ModelPathTimer",
@@ -13,5 +13,5 @@ __all__ = [
     "StabilityAnalyzer",
     "compute_throughput",
     "BenchmarkSuite",
-    "init_master_csv",
+    "new_session_id",
 ]

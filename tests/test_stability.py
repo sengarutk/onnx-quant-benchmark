@@ -1,111 +1,69 @@
-"""
-Unit tests for StabilityAnalyzer, variance metrics, and stability gates.
-"""
+"""Unit tests for the multi-session StabilityAnalyzer."""
 
-from pathlib import Path
+import numpy as np
 import pytest
 
-from src.benchmarking.stability import StabilityAnalyzer
+from src.benchmarking.stability import (
+    StabilityAnalyzer,
+    _detect_l3_cache_mb,
+    _flush_cpu_cache,
+    coefficient_of_variation,
+    mad_filter,
+)
+
+
+def _session(p50: float, n: int = 50, jitter: float = 0.01, seed: int = 0) -> dict:
+    lat = list(p50 * (1 + jitter * np.random.default_rng(seed).standard_normal(n)))
+    return {"p50_ms": float(np.median(lat)), "p95_ms": float(np.percentile(lat, 95)), "latencies_ms": lat}
+
+
+def _runner(p50s):
+    it = iter([_session(p, seed=i) for i, p in enumerate(p50s)])
+    return lambda: next(it)
 
 
 class TestStability:
-    """Test suite validating stability calculation and CV threshold gating."""
+    def test_stable_run_pooled_metrics_and_ci(self) -> None:
+        an = StabilityAnalyzer(sessions=5, cooldown_seconds=0.0, bootstrap_resamples=200)
+        res = an.run_stability_suite(_runner([10.0, 10.05, 10.0, 9.98, 10.02]))
+        assert res["stable"] is True and res["total_sessions"] == 5
+        assert res["supplemental_sessions_run"] is False
+        m = res["metrics"]
+        assert m["samples"] == 250
+        assert m["p50_ci95_ms"][0] <= m["p50_ms"] <= m["p50_ci95_ms"][1]
+        assert np.isclose(m["throughput_fps"], 1000.0 / m["p50_ms"])
 
-    def test_stability_analyzer_stable_run(self) -> None:
-        """Verifies stable mock benchmark passes threshold gate with 5 sessions."""
-        analyzer = StabilityAnalyzer(sessions=5, cooldown_seconds=0.0, cv_threshold=0.05)
-
-        mock_metrics = [
-            {"p50_ms": 10.0, "p95_ms": 11.0},
-            {"p50_ms": 10.1, "p95_ms": 11.1},
-            {"p50_ms": 10.0, "p95_ms": 11.0},
-            {"p50_ms": 10.0, "p95_ms": 11.0},
-            {"p50_ms": 10.1, "p95_ms": 11.1},
-        ]
-        iter_obj = iter(mock_metrics)
-
-        res = analyzer.run_stability_suite(lambda: next(iter_obj))
-
-        assert res["stable"] is True
-        assert res["cv_p50"] < 0.05
-        assert res["total_sessions"] == 5
-        assert res["stability_warning"] is None
-        assert abs(res["mean_p50_ms"] - 10.0) < 0.2
-
-    def test_stability_analyzer_adaptive_supplemental_sessions(self) -> None:
-        """Verifies CV > 0.04 across initial 5 sessions triggers 2 supplemental rounds and IQM filters outlier."""
-        analyzer = StabilityAnalyzer(sessions=5, cooldown_seconds=0.0, cv_threshold=0.05)
-
-        # Initial 5 sessions have a single OS spike (CV > 0.04), prompting 2 supplemental sessions
-        mock_metrics = [
-            {"p50_ms": 10.0, "p95_ms": 11.0},
-            {"p50_ms": 10.1, "p95_ms": 11.1},
-            {"p50_ms": 12.0, "p95_ms": 13.0},  # Moderate jitter triggering supplemental rounds
-            {"p50_ms": 10.0, "p95_ms": 11.0},
-            {"p50_ms": 10.2, "p95_ms": 11.2},
-            # 2 Supplemental sessions:
-            {"p50_ms": 10.0, "p95_ms": 11.0},
-            {"p50_ms": 10.1, "p95_ms": 11.1},
-        ]
-        iter_obj = iter(mock_metrics)
-
-        res = analyzer.run_stability_suite(lambda: next(iter_obj))
-
+    def test_supplemental_sessions_triggered_once(self) -> None:
+        an = StabilityAnalyzer(sessions=5, cooldown_seconds=0.0, bootstrap_resamples=100)
+        res = an.run_stability_suite(_runner([10.0, 10.1, 12.0, 10.0, 10.2, 10.0, 10.1]))
+        assert res["supplemental_sessions_run"] is True
         assert res["total_sessions"] == 7
-        assert res["stable"] is True
-        assert res["cv_p50"] < 0.05
-        assert 12.0 not in res["filtered_p50_values"] or len(res["filtered_p50_values"]) == 5
+        # The gate uses ALL sessions; the MAD-filtered CV is diagnostic only
+        assert np.isclose(res["cv_p50"], coefficient_of_variation(res["session_p50_values"]))
+        assert res["cv_p50_mad_filtered"] < res["cv_p50"]
+        assert res["stable"] is (res["cv_p50"] <= 0.05)
 
-    def test_stability_analyzer_unstable_run(self) -> None:
-        """Verifies widespread variance mock benchmark triggers UNSTABLE verdict."""
-        analyzer = StabilityAnalyzer(sessions=5, cooldown_seconds=0.0, cv_threshold=0.05)
-
-        mock_metrics = [
-            {"p50_ms": 10.0, "p95_ms": 11.0},
-            {"p50_ms": 20.0, "p95_ms": 25.0},
-            {"p50_ms": 12.0, "p95_ms": 14.0},
-            {"p50_ms": 30.0, "p95_ms": 35.0},
-            {"p50_ms": 15.0, "p95_ms": 18.0},
-            {"p50_ms": 28.0, "p95_ms": 32.0},
-            {"p50_ms": 19.0, "p95_ms": 22.0},
-        ]
-        iter_obj = iter(mock_metrics)
-
-        res = analyzer.run_stability_suite(lambda: next(iter_obj))
-
+    def test_unstable_run(self) -> None:
+        an = StabilityAnalyzer(sessions=5, cooldown_seconds=0.0, bootstrap_resamples=100)
+        res = an.run_stability_suite(_runner([10, 20, 12, 30, 15, 28, 19]))
         assert res["stable"] is False
-        assert res["cv_p50"] > 0.05
-        assert "High latency variance" in res["stability_warning"]
+        assert "exceeds" in res["stability_warning"]
 
-    def test_stability_analyzer_zero_mad_identical_runs(self) -> None:
-        """Verifies zero-MAD does not cause ZeroDivisionError and all samples are treated as inliers."""
-        analyzer = StabilityAnalyzer(sessions=5, cooldown_seconds=0.0, cv_threshold=0.05)
+    def test_configured_session_count_is_respected(self) -> None:
+        an = StabilityAnalyzer(sessions=3, cooldown_seconds=0.0, supplemental_sessions=0, bootstrap_resamples=50)
+        assert an.run_stability_suite(_runner([5.0, 5.0, 5.0]))["total_sessions"] == 3
 
-        mock_metrics = [{"p50_ms": 10.0, "p95_ms": 11.0}] * 5
-        iter_obj = iter(mock_metrics)
+    def test_zero_latency_is_flagged(self) -> None:
+        an = StabilityAnalyzer(sessions=2, cooldown_seconds=0.0, bootstrap_resamples=20)
+        z = {"p50_ms": 0.0, "p95_ms": 0.0, "latencies_ms": [0.0] * 10}
+        res = an.run_stability_suite(lambda: z)
+        assert res["stable"] is False and "near-zero" in res["stability_warning"]
 
-        res = analyzer.run_stability_suite(lambda: next(iter_obj))
-
-        assert res["stable"] is True
-        assert res["cv_p50"] == 0.0
-        assert len(res["filtered_p50_values"]) == 5
-        assert res["total_sessions"] == 5
+    def test_mad_filter_and_cv(self) -> None:
+        assert mad_filter([10, 10, 10, 10, 50]) == [10, 10, 10, 10, 50]  # MAD = 0 -> unchanged
+        assert 50.0 not in mad_filter([10, 10.2, 9.8, 10.1, 50])
+        assert coefficient_of_variation([0.0, 0.0]) == 0.0
 
     def test_flush_cpu_cache_execution(self) -> None:
-        """Verifies dynamic L3 cache detection and buffer dirtying execute without error."""
-        from src.benchmarking.stability import _detect_l3_cache_mb, _flush_cpu_cache
-        l3_mb = _detect_l3_cache_mb()
-        assert l3_mb >= 1
-        _flush_cpu_cache(size_mb=4)  # Fast flush test
-
-    def test_stability_zero_division_guard(self) -> None:
-        """Verifies stability analyzer handles zero-latency inputs gracefully without division error and marks unstable."""
-        analyzer = StabilityAnalyzer(sessions=5, cooldown_seconds=0.0, cv_threshold=0.05)
-        mock_metrics = [{"p50_ms": 0.0, "p95_ms": 0.0}] * 5
-        iter_obj = iter(mock_metrics)
-
-        res = analyzer.run_stability_suite(lambda: next(iter_obj))
-        assert res["cv_p50"] == 0.0
-        assert res["mean_p50_ms"] == 0.0
-        assert res["stable"] is False
-        assert "Zero or near-zero latency detected" in res["stability_warning"]
+        assert _detect_l3_cache_mb() >= 1
+        _flush_cpu_cache(size_mb=4)

@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies (CPU-only PyTorch)
+        run: |
+          python -m pip install --upgrade pip
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements.txt
+      - name: Byte-compile
+        run: python -m compileall -q src scripts tests
+      - name: Unit tests (artifact-dependent tests are skipped on a fresh clone)
+        run: python -m pytest tests/ --cov=src --cov-report=term
+      - name: README tables match committed results
+        run: python scripts/update_readme.py --check
+      - name: Pipeline dry run
+        run: python scripts/run_full_pipeline.py --dry-run

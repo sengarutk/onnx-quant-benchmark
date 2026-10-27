@@ -16,6 +16,9 @@ from src.quantization.calibration_reader import BenchmarkCalibrationDataReader
 from src.quantization.convert_fp16 import convert_onnx_to_fp16
 from src.quantization.quantize_onnx import quantize_onnx_static
 from src.validation.validate_quantization import validate_quantized_model
+from tests.conftest import requires_artifacts
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 class SimpleToyModel(nn.Module):
@@ -89,67 +92,38 @@ class TestQuantization:
         op_types = {node.op_type for node in loaded.graph.node}
         assert "QuantizeLinear" in op_types or "DequantizeLinear" in op_types or "QLinearConv" in op_types
 
-    def test_validate_quantized_model_quality_gate(self, tmp_path: Path) -> None:
-        """Verifies degradation gating marks severe drops as REJECTED and acceptable drops as PASS."""
-        root = Path(__file__).resolve().parent.parent
-        manifest_p = root / "data" / "sample_images" / "manifest.json"
-        base_p = root / "results" / "raw" / "pytorch_fp32" / "yolo_nano" / "baseline_metrics.json"
-        onnx_p = root / "models" / "exported" / "yolo_nano_fp32_opset17.onnx"
+    def test_quantize_includes_conv_transpose(self, tmp_path: Path) -> None:
+        """ConvTranspose layers (autoencoder decoder) are quantized, not silently left in FP32."""
+        model = nn.Sequential(nn.Conv2d(3, 4, 3, padding=1), nn.ReLU(), nn.ConvTranspose2d(4, 3, 4, stride=2, padding=1))
+        fp32, int8 = tmp_path / "ct_fp32.onnx", tmp_path / "ct_int8.onnx"
+        export_to_onnx(model, torch.randn(1, 3, 16, 16), fp32, ["input"], ["output"], opset_version=17)
+        paths = []
+        for i in range(4):
+            p = tmp_path / f"c{i}.npy"
+            np.save(str(p), np.random.rand(1, 3, 16, 16).astype(np.float32))
+            paths.append(p)
+        reader = BenchmarkCalibrationDataReader(paths, "input", (1, 3, 16, 16), lambda q: np.load(str(q)))
+        quantize_onnx_static(fp32, int8, reader)
+        g = onnx.load(str(int8)).graph
+        ct = [n for n in g.node if n.op_type == "ConvTranspose"][0]
+        producers = {o: n.op_type for n in g.node for o in n.output}
+        assert producers[ct.input[1]] == "DequantizeLinear"  # weights pass through Q/DQ
 
-        if not manifest_p.is_file() or not base_p.is_file() or not onnx_p.is_file():
-            pytest.skip("Required benchmark artifacts not present")
-
-        # Create mini manifest for fast unit testing
-        full_manifest = json.loads(manifest_p.read_text(encoding="utf-8"))
-        mini_manifest = {
-            "detection_samples": full_manifest.get("detection_samples", [])[:2],
-            "industrial_samples": full_manifest.get("industrial_samples", [])[:2],
-        }
-        mini_manifest_p = tmp_path / "mini_manifest.json"
-        mini_manifest_p.write_text(json.dumps(mini_manifest), encoding="utf-8")
-
-        # Test with standard threshold -> should PASS
-        pass_cfg = QualityThresholdConfig(max_map_drop=0.05)
-        rep_pass = validate_quantized_model("yolo_nano", "fp32", onnx_p, mini_manifest_p, base_p, pass_cfg)
-        assert rep_pass["status"] == "PASS"
-
-        # Test with strict threshold on artificially high baseline -> should be REJECTED
-        mock_base = tmp_path / "mock_base.json"
-        mock_base.write_text(json.dumps({"metrics": {"mAP_50": 0.99, "mAP_50_95": 0.95}}), encoding="utf-8")
-
-        strict_cfg = QualityThresholdConfig(max_map_drop=0.01)
-        rep_reject = validate_quantized_model("yolo_nano", "fp32", onnx_p, mini_manifest_p, mock_base, strict_cfg)
-        assert rep_reject["status"] == "REJECTED"
-        assert "exceeds threshold" in rep_reject["rejection_reason"]
-
-    def test_validate_industrial_quantized_model(self, tmp_path: Path) -> None:
-        """Tests validate_quantized_model on industrial autoencoder model and rejection gating."""
-        root = Path(__file__).resolve().parent.parent
-        manifest_p = root / "data" / "sample_images" / "manifest.json"
-        base_p = root / "results" / "raw" / "pytorch_fp32" / "industrial_autoencoder" / "baseline_metrics.json"
-        onnx_p = root / "models" / "exported" / "industrial_autoencoder_fp32_opset17.onnx"
-
-        if not manifest_p.is_file() or not base_p.is_file() or not onnx_p.is_file():
-            pytest.skip("Required benchmark artifacts not present")
-
-        # Create mini manifest for fast unit testing
-        full_manifest = json.loads(manifest_p.read_text(encoding="utf-8"))
-        mini_manifest = {
-            "detection_samples": full_manifest.get("detection_samples", [])[:2],
-            "industrial_samples": full_manifest.get("industrial_samples", [])[:2],
-        }
-        mini_manifest_p = tmp_path / "mini_manifest_ind.json"
-        mini_manifest_p.write_text(json.dumps(mini_manifest), encoding="utf-8")
-
-        # Test pass case
-        pass_cfg = QualityThresholdConfig(max_auroc_drop=0.05)
-        rep_pass = validate_quantized_model("industrial_autoencoder", "fp32", onnx_p, mini_manifest_p, base_p, pass_cfg)
-        assert rep_pass["status"] == "PASS"
-
-        # Test reject case
-        mock_base = tmp_path / "mock_ind_base.json"
-        mock_base.write_text(json.dumps({"metrics": {"image_auroc": 2.0, "aupro": 2.0}}), encoding="utf-8")
-
-        strict_cfg = QualityThresholdConfig(max_auroc_drop=0.0)
-        rep_reject = validate_quantized_model("industrial_autoencoder", "fp32", onnx_p, mini_manifest_p, mock_base, strict_cfg)
-        assert rep_reject["status"] == "REJECTED"
+    @requires_artifacts
+    def test_validate_quantized_model_gate(self, tmp_path: Path) -> None:
+        """PASS against the real baseline; REJECTED against an artificially higher baseline."""
+        manifest = json.loads((ROOT / "data" / "sample_images" / "manifest.json").read_text())
+        mini = tmp_path / "mini.json"
+        mini.write_text(json.dumps({"detection_samples": manifest["detection_samples"][:4],
+                                    "industrial_samples": manifest["industrial_samples"][:2] + manifest["industrial_samples"][-2:]}))
+        for model, metric in (("yolo_nano", "mAP_50"), ("industrial_autoencoder", "image_auroc")):
+            onnx_p = ROOT / "models" / "exported" / f"{model}_fp32_opset17.onnx"
+            fake = tmp_path / f"{model}_base.json"
+            # baseline equal to the candidate itself -> delta 0 -> PASS
+            from src.validation.numerical_equivalence import evaluate_onnx_dataset
+            own = evaluate_onnx_dataset(model, onnx_p, mini)["metrics"]
+            fake.write_text(json.dumps({"metrics": own}))
+            assert validate_quantized_model(model, "fp32", onnx_p, mini, fake)["status"] == "PASS"
+            fake.write_text(json.dumps({"metrics": {**own, metric: own[metric] + 0.5}}))
+            rep = validate_quantized_model(model, "fp32", onnx_p, mini, fake, QualityThresholdConfig(max_map_drop=0.01, max_auroc_drop=0.01))
+            assert rep["status"] == "REJECTED" and rep["rejection_reason"]

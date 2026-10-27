@@ -18,6 +18,9 @@ from src.quantization.calibration_reader import BenchmarkCalibrationDataReader
 
 logger = setup_logger("quantize_onnx")
 
+# Compute-heavy operators quantized to INT8 (ConvTranspose covers the autoencoder decoder).
+DEFAULT_QUANTIZED_OPS = ["Conv", "ConvTranspose", "MatMul", "Gemm"]
+
 
 def quantize_onnx_static(
     input_onnx_path: Union[str, Path],
@@ -43,7 +46,7 @@ def quantize_onnx_static(
         per_channel: Symmetrically quantize weights per-channel.
         weight_type: 'QInt8' or 'QUInt8'.
         activation_type: 'QInt8' or 'QUInt8'.
-        op_types_to_quantize: Operators to quantize (default: ['Conv', 'MatMul', 'Gemm']).
+        op_types_to_quantize: Operators to quantize (default: DEFAULT_QUANTIZED_OPS).
         nodes_to_exclude: List of specific node names to leave in FP32.
 
     Returns:
@@ -93,8 +96,8 @@ def quantize_onnx_static(
     q_format = format_map.get(quant_format, ort_quant.QuantFormat.QDQ)
     c_method = calib_map.get(calibrate_method, ort_quant.CalibrationMethod.MinMax)
     w_type = type_map.get(weight_type, ort_quant.QuantType.QInt8)
-    a_type = type_map.get(activation_type, ort_quant.QuantType.QInt8)
-    target_ops = op_types_to_quantize or ["Conv", "MatMul", "Gemm"]
+    a_type = type_map.get(activation_type, ort_quant.QuantType.QUInt8)
+    target_ops = op_types_to_quantize or DEFAULT_QUANTIZED_OPS
 
     calibration_data_reader.rewind()
 

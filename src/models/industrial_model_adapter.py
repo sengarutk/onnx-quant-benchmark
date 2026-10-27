@@ -3,12 +3,49 @@ Industrial Convolutional Autoencoder adapter for anomaly reconstruction and defe
 """
 
 from pathlib import Path
-from typing import Optional, Tuple, Union
+import json
+from typing import Dict, Optional, Tuple, Union
+import cv2
 import numpy as np
 import torch
 import torch.nn as nn
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+SCORING_PARAMS_PATH = PROJECT_ROOT / "models" / "weights" / "industrial_autoencoder_scoring.json"
+DEFAULT_SCORING = {"blur_sigma": 4.0, "top_k_ratio": 0.01}
+
+
+def load_scoring_params() -> Dict[str, float]:
+    """Anomaly-scoring hyper-parameters selected on the validation split by scripts/train_models.py."""
+    if SCORING_PARAMS_PATH.is_file():
+        data = json.loads(SCORING_PARAMS_PATH.read_text(encoding="utf-8"))
+        return {"blur_sigma": float(data["blur_sigma"]), "top_k_ratio": float(data["top_k_ratio"])}
+    return dict(DEFAULT_SCORING)
+
+
+def top_k_anomaly_score(
+    anomaly_map: Union[torch.Tensor, np.ndarray],
+    top_k_ratio: Optional[float] = None,
+    blur_sigma: Optional[float] = None,
+) -> float:
+    """
+    Image-level anomaly score: Gaussian-smooth the per-pixel absolute reconstruction error map (sigma in pixels,
+    0 disables smoothing), then average its top-k% values. Defaults come from load_scoring_params().
+    """
+    params = load_scoring_params()
+    k_ratio = params["top_k_ratio"] if top_k_ratio is None else top_k_ratio
+    sigma = params["blur_sigma"] if blur_sigma is None else blur_sigma
+    if isinstance(anomaly_map, torch.Tensor):
+        anomaly_map = anomaly_map.detach().float().cpu().numpy()
+    amap = np.asarray(anomaly_map, dtype=np.float32)
+    amap = amap.reshape(amap.shape[-2:]) if amap.ndim > 2 else amap
+    if sigma > 0:
+        amap = cv2.GaussianBlur(amap, (0, 0), sigma)
+    flat = amap.ravel()
+    k = max(1, int(flat.size * k_ratio))
+    return float(np.mean(np.partition(flat, -k)[-k:]))
 
 
 class ConvAutoencoder(nn.Module):
@@ -88,21 +125,21 @@ class IndustrialModelAdapter:
         weights_path: Optional[str] = None,
         input_shape: Tuple[int, int, int, int] = (1, 3, 256, 256),
         device: str = "cpu",
+        require_weights: bool = False,
     ):
         self.input_shape = input_shape
         self.device = torch.device(device)
 
         self.model = ConvAutoencoder()
-        target_weights = weights_path
-        if not target_weights:
-            default_weights = PROJECT_ROOT / "models" / "weights" / "industrial_autoencoder_baseline.pt"
-            if default_weights.is_file():
-                target_weights = str(default_weights)
-
-        if target_weights and Path(target_weights).is_file():
-            ckpt = torch.load(target_weights, map_location=self.device, weights_only=True)
+        target = Path(weights_path) if weights_path else PROJECT_ROOT / "models" / "weights" / "industrial_autoencoder_trained.pt"
+        self.weights_loaded = False
+        if target.is_file():
+            ckpt = torch.load(str(target), map_location="cpu", weights_only=True)
             state_dict = ckpt.get("model", ckpt) if isinstance(ckpt, dict) else ckpt
-            self.model.load_state_dict(state_dict, strict=False)
+            self.model.load_state_dict(state_dict, strict=True)
+            self.weights_loaded = True
+        elif require_weights or weights_path:
+            raise FileNotFoundError(f"Autoencoder weights not found: {target}. Run scripts/train_models.py first.")
 
         self.model.to(self.device)
         self.model.eval()
@@ -126,24 +163,6 @@ class IndustrialModelAdapter:
             anomaly_map = torch.mean(torch.abs(tensor - reconstruction), dim=1, keepdim=True)
             return reconstruction, anomaly_map
 
-    def compute_anomaly_score(self, anomaly_map: Union[torch.Tensor, np.ndarray], top_k_ratio: float = 0.01) -> float:
-        """
-        Computes aggregate image-level anomaly score from the top-k highest reconstruction error pixels.
-
-        Args:
-            anomaly_map: Anomaly tensor or NumPy array of shape [1, 1, H, W] or [H, W].
-            top_k_ratio: Proportion of highest-error pixels to average (default: 0.01).
-
-        Returns:
-            Scalar anomaly score float >= 0.0.
-        """
-        if isinstance(anomaly_map, torch.Tensor):
-            flat = anomaly_map.detach().cpu().view(-1)
-            k = max(1, int(flat.numel() * top_k_ratio))
-            topk_vals, _ = torch.topk(flat, k)
-            return float(topk_vals.mean().item())
-
-        flat = np.asarray(anomaly_map, dtype=np.float32).ravel()
-        k = max(1, int(flat.size * top_k_ratio))
-        partitioned = np.partition(flat, -k)[-k:]
-        return float(np.mean(partitioned))
+    def compute_anomaly_score(self, anomaly_map: Union[torch.Tensor, np.ndarray], top_k_ratio: Optional[float] = None) -> float:
+        """Computes the image-level anomaly score (see top_k_anomaly_score)."""
+        return top_k_anomaly_score(anomaly_map, top_k_ratio)

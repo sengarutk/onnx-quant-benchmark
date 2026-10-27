@@ -1,158 +1,90 @@
-"""
-Unit tests for Quantization-Aware NMS Calibration & Vectorized Post-Processing.
-"""
+"""Unit tests for Q-Aware NMS calibration, F1 accounting and the ablation experiment."""
 
-from pathlib import Path
 import json
+from pathlib import Path
 import numpy as np
 import pytest
 import torch
 
 from src.models.yolo_adapter import YOLOAdapter
-from src.quantization.q_aware_nms import apply_q_aware_nms, calibrate_q_aware_nms, compute_f1_score
-from src.experiments.run_q_aware_ablation import run_q_aware_nms_ablation
+from src.quantization.q_aware_nms import apply_q_aware_nms, calibrate_q_aware_nms, compute_f1_score, detection_counts
+from tests.conftest import requires_artifacts
+
+
+def _raw_with_boxes(boxes, scores):
+    """Builds a decoded [6, 8400] output containing the given (cx, cy, w, h) boxes with class-0 probabilities."""
+    raw = np.full((6, 8400), -12.0, dtype=np.float32)
+    for i, ((cx, cy, w, h), s) in enumerate(zip(boxes, scores)):
+        raw[:4, i] = [cx, cy, w, h]
+        raw[4, i] = np.log(s / (1 - s))
+    return raw
+
+
+def _cache(raw, gt):
+    return {"raw": raw, "orig_shape": (640, 640), "ratio": (1.0, 1.0), "pad": (0.0, 0.0), "gt": gt}
 
 
 class TestQAwareNMS:
-    """Test suite asserting Q-Aware NMS mathematical properties and threshold calibration."""
-
-    def test_compute_f1_score_perfect_and_empty(self) -> None:
-        """Asserts 1.0 F1 on perfect match, 0.0 F1 on zero predictions, and handles empty sets."""
+    def test_f1_and_counts(self) -> None:
         gt = [[{"bbox": [100, 100, 200, 200], "class_id": 0}]]
-        preds_perfect = [[{"bbox": [100, 100, 200, 200], "score": 0.95, "class_id": 0}]]
+        hit = [[{"bbox": [100, 100, 200, 200], "score": 0.9, "class_id": 0}]]
+        assert np.isclose(compute_f1_score(hit, gt), 1.0)
+        assert compute_f1_score([[]], gt) == 0.0
+        assert compute_f1_score([[]], [[]]) == 0.0
+        assert compute_f1_score(hit, [[]]) == 0.0
+        wrong_cls = [[{"bbox": [100, 100, 200, 200], "score": 0.9, "class_id": 1}]]
+        assert detection_counts(wrong_cls, gt) == (0, 1, 1)
+        # duplicates: second match of the same GT is a false positive
+        dup = [[{"bbox": [100, 100, 200, 200], "score": 0.9, "class_id": 0}, {"bbox": [101, 101, 201, 201], "score": 0.8, "class_id": 0}]]
+        assert detection_counts(dup, gt) == (1, 1, 0)
 
-        f1_perfect = compute_f1_score(preds_perfect, gt, iou_threshold=0.5)
-        assert np.isclose(f1_perfect, 1.0)
-
-        preds_empty = [[]]
-        f1_empty = compute_f1_score(preds_empty, gt, iou_threshold=0.5)
-        assert np.isclose(f1_empty, 0.0)
-
-        f1_both_empty = compute_f1_score([[]], [[]], iou_threshold=0.5)
-        assert np.isclose(f1_both_empty, 0.0)
-
-        # Ground truth empty, preds non-empty
-        f1_gt_empty = compute_f1_score(preds_perfect, [[]], iou_threshold=0.5)
-        assert np.isclose(f1_gt_empty, 0.0)
-
-        # Class mismatch -> 0 F1
-        preds_wrong_class = [[{"bbox": [100, 100, 200, 200], "score": 0.95, "class_id": 1}]]
-        f1_wrong_cls = compute_f1_score(preds_wrong_class, gt, iou_threshold=0.5)
-        assert np.isclose(f1_wrong_cls, 0.0)
-
-    def test_calibrate_q_aware_nms_synthetic_loader(self) -> None:
-        """Verifies 2D grid search threshold optimization on synthetic calibration loader."""
+    def test_calibration_finds_better_threshold(self) -> None:
+        """A low-confidence true box and a confident duplicate: raising IoU/lowering conf changes F1 measurably."""
         adapter = YOLOAdapter()
+        gt = [{"bbox": [100, 100, 200, 200], "class_id": 0}, {"bbox": [400, 400, 480, 480], "class_id": 0}]
+        raw = _raw_with_boxes([(150, 150, 100, 100), (440, 440, 80, 80)], [0.9, 0.18])
+        res = calibrate_q_aware_nms([_cache(raw, gt)] * 3, adapter)
+        assert res["baseline_f1"] < res["optimal_f1"] == 1.0
+        assert res["optimal_conf"] <= 0.15
+        assert res["grid_evaluated"] == 18 * 14
 
-        calib_data = []
-        for i in range(5):
-            calib_data.append({
-                "image_path": f"data/sample_images/detection/images/det_{i:03d}.jpg",
-                "ground_truth_boxes": [{"bbox": [80, 120, 160, 180], "class_id": 0}],
-            })
-
-        res = calibrate_q_aware_nms(
-            model_adapter=adapter,
-            calib_loader=calib_data,
-            precision="int8",
-            runtime="ort_cpu",
-            conf_min=0.15,
-            conf_max=0.40,
-            conf_step=0.05,
-            iou_min=0.35,
-            iou_max=0.55,
-            iou_step=0.05,
-        )
-
-        assert "optimal_conf" in res
-        assert "optimal_iou" in res
-        assert "optimal_f1" in res
-        assert "baseline_f1" in res
-        assert res["grid_evaluated"] == 6 * 5  # 6 conf * 5 iou = 30
-        assert 0.15 <= res["optimal_conf"] <= 0.40
-        assert 0.35 <= res["optimal_iou"] <= 0.55
-
-    def test_calibrate_q_aware_nms_csv_and_json_manifest(self, tmp_path: Path) -> None:
-        """Verifies calibrate_q_aware_nms parses CSV and JSON manifests."""
+    def test_ties_keep_default_operating_point(self) -> None:
         adapter = YOLOAdapter()
+        gt = [{"bbox": [100, 100, 200, 200], "class_id": 0}]
+        raw = _raw_with_boxes([(150, 150, 100, 100)], [0.95])
+        res = calibrate_q_aware_nms([_cache(raw, gt)], adapter)
+        assert res["f1_delta"] == 0.0 and (res["optimal_conf"], res["optimal_iou"]) == (0.25, 0.45)
 
-        # Test JSON loader
-        json_file = tmp_path / "manifest.json"
-        json_data = {
-            "detection_samples": [
-                {
-                    "image_path": "data/sample_images/detection/images/det_000.jpg",
-                    "ground_truth_boxes": [{"bbox": [80, 120, 160, 180], "class_id": 0}],
-                }
-            ]
-        }
-        json_file.write_text(json.dumps(json_data), encoding="utf-8")
-        res_json = calibrate_q_aware_nms(adapter, calib_loader=json_file, conf_min=0.25, conf_max=0.25, iou_min=0.45, iou_max=0.45)
-        assert res_json["optimal_conf"] == 0.25
-
-        # Test CSV loader
-        csv_file = tmp_path / "manifest.csv"
-        csv_file.write_text("path,category,split\ndata/sample_images/detection/images/det_000.jpg,detection,calibration\n", encoding="utf-8")
-        res_csv = calibrate_q_aware_nms(adapter, calib_loader=csv_file, conf_min=0.25, conf_max=0.25, iou_min=0.45, iou_max=0.45)
-        assert res_csv["optimal_conf"] == 0.25
-
-    def test_apply_q_aware_nms_all_formats(self) -> None:
-        """Verifies apply_q_aware_nms across raw tensors, list of tensors, and parsed dicts."""
-        policy = {"optimal_conf": 0.50, "optimal_iou": 0.45}
-        adapter = YOLOAdapter()
-
-        # 1. Parsed nested dicts
-        preds = [[
-            {"bbox": [10, 10, 50, 50], "score": 0.30, "class_id": 0},
-            {"bbox": [20, 20, 80, 80], "score": 0.85, "class_id": 0},
-        ]]
-        filtered = apply_q_aware_nms(preds, policy)
-        assert len(filtered[0]) == 1
-        assert filtered[0][0]["score"] == 0.85
-
-        # 2. Parsed flat list
-        flat_preds = [
-            {"bbox": [10, 10, 50, 50], "score": 0.30, "class_id": 0},
-            {"bbox": [20, 20, 80, 80], "score": 0.85, "class_id": 0},
-        ]
-        flat_filtered = apply_q_aware_nms(flat_preds, policy)
-        assert len(flat_filtered) == 1
-
-        # 3. Raw tensor
-        raw_t = torch.randn(1, 84, 8400)
-        raw_res = apply_q_aware_nms(
-            raw_t,
-            policy,
-            original_shapes=[(640, 640)],
-            ratios=[(1.0, 1.0)],
-            pads=[(0.0, 0.0)],
-            yolo_adapter=adapter,
-        )
-        assert isinstance(raw_res, list)
-
-        # 4. List of raw tensors
-        raw_list = [raw_t.numpy()]
-        list_res = apply_q_aware_nms(
-            raw_list,
-            policy,
-            original_shapes=[(640, 640)],
-            ratios=[(1.0, 1.0)],
-            pads=[(0.0, 0.0)],
-            yolo_adapter=adapter,
-        )
-        assert isinstance(list_res, list)
-        assert len(list_res) == 1
-
-    def test_calibrate_q_aware_nms_empty_loader_raises(self) -> None:
-        """Verifies ValueError when no calibration samples are available."""
+    def test_calibration_requires_labels(self) -> None:
         adapter = YOLOAdapter()
         with pytest.raises(ValueError, match="No valid calibration samples"):
-            calibrate_q_aware_nms(adapter, calib_loader=[{"image_path": "non_existent_file.jpg"}])
+            calibrate_q_aware_nms([], adapter)
+        with pytest.raises(ValueError, match="labeled calibration split"):
+            calibrate_q_aware_nms([_cache(np.zeros((6, 8400), np.float32), [])], adapter)
 
-    def test_run_q_aware_ablation_end_to_end(self) -> None:
-        """Verifies end-to-end execution of run_q_aware_nms_ablation()."""
-        run_q_aware_nms_ablation()
-        assert Path("results/tables/table6_q_aware_nms_ablation.md").is_file()
-        assert Path("results/tables/table7_decision_flip_audit.md").is_file()
-        assert Path("results/figures/q_aware_pareto_recovery.png").is_file()
-        assert Path("results/figures/decision_flip_attribution.png").is_file()
+    def test_apply_q_aware_nms_all_formats(self) -> None:
+        policy = {"optimal_conf": 0.50, "optimal_iou": 0.45}
+        preds = [[{"bbox": [10, 10, 50, 50], "score": 0.30, "class_id": 0}, {"bbox": [20, 20, 80, 80], "score": 0.85, "class_id": 0}]]
+        assert [p["score"] for p in apply_q_aware_nms(preds, policy)[0]] == [0.85]
+        assert len(apply_q_aware_nms(preds[0], policy)) == 1
+        raw = _raw_with_boxes([(150, 150, 100, 100), (300, 300, 50, 50)], [0.9, 0.3])
+        out = apply_q_aware_nms(raw, policy, [(640, 640)], [(1.0, 1.0)], [(0.0, 0.0)], YOLOAdapter())
+        assert len(out) == 1
+        out_list = apply_q_aware_nms([torch.from_numpy(raw)], policy, yolo_adapter=YOLOAdapter())
+        assert len(out_list) == 1 and len(out_list[0]) == 1
+
+    @requires_artifacts
+    def test_run_q_aware_ablation_end_to_end(self, tmp_path: Path) -> None:
+        from src.experiments.run_q_aware_ablation import run_q_aware_nms_ablation
+        out = run_q_aware_nms_ablation(tmp_path)
+        saved = json.loads((tmp_path / "q_aware_nms.json").read_text())
+        assert saved["test_images"] == out["test_images"] > 0
+        for row in out["ablation"]:
+            lo, hi = row["delta_f1_ci95"]
+            assert lo <= row["delta_f1"] <= hi
+            assert 0.0 <= row["wilcoxon_errors"]["p_holm"] <= 1.0
+        assert out["flips"][0]["default_thresholds"]["flip_rate"] == 0.0  # reference vs itself
+        for name in ("table6_q_aware_nms_ablation.md", "table7_decision_flip_audit.md"):
+            assert (tmp_path / "tables" / name).is_file()
+        for name in ("q_aware_pareto_recovery.png", "decision_flip_attribution.png"):
+            assert (tmp_path / "figures" / name).is_file()

@@ -116,3 +116,31 @@ def wilcoxon_paired_test(
         "median_diff": median_diff,
         "n_pairs": int(arr_a.size),
     }
+
+
+def holm_bonferroni(p_values: Dict[str, float], alpha: float = 0.05) -> Dict[str, Dict[str, Any]]:
+    """
+    Holm-Bonferroni step-down correction controlling the family-wise error rate.
+
+    Args:
+        p_values: Mapping of hypothesis name -> raw p-value.
+        alpha: Family-wise significance level.
+
+    Returns:
+        Mapping of name -> {"p_value", "p_adjusted", "reject"} where p_adjusted is the Holm-adjusted p-value
+        (monotone, capped at 1.0).
+    """
+    names = sorted(p_values, key=lambda k: p_values[k])
+    m = len(names)
+    out: Dict[str, Dict[str, Any]] = {}
+    running_max = 0.0
+    still_rejecting = True
+    for rank, name in enumerate(names):
+        p = float(p_values[name])
+        adj = min(1.0, (m - rank) * p)
+        running_max = max(running_max, adj)
+        reject = still_rejecting and p <= alpha / (m - rank)
+        if not reject:
+            still_rejecting = False
+        out[name] = {"p_value": p, "p_adjusted": running_max, "reject": bool(reject)}
+    return out

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-End-to-end CLI driver: Exports models to ONNX Opset 17, simplifies graphs, verifies tensor parity, and audits quality.
+Exports the trained models to ONNX (opset 17), validates and simplifies the graphs, checks output parity against
+PyTorch on a real test image, evaluates task metrics with ONNX Runtime, and renders docs/export-validation.md.
+Exits non-zero if any parity or dataset check fails.
 """
 
 import json
-import os
 import sys
 from pathlib import Path
-import torch
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -15,11 +15,13 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.common.logging import setup_logger
 from src.common.seed import seed_everything
-from src.export.export_onnx import export_model_family
+from src.data.writers import load_manifest
+from src.export.export_onnx import AutoencoderExportWrapper, export_model_family
 from src.export.inspect_graph import inspect_onnx_graph
 from src.export.simplify_onnx import simplify_onnx_graph
 from src.export.validate_onnx_graph import validate_onnx_graph
 from src.models.industrial_model_adapter import IndustrialModelAdapter
+from src.models.preprocess import preprocess_detection_image, preprocess_industrial_image
 from src.models.yolo_adapter import YOLOAdapter
 from src.validation.numerical_equivalence import compare_pytorch_vs_onnx, evaluate_onnx_dataset
 
@@ -28,133 +30,80 @@ logger = setup_logger("export_and_validate")
 
 def main() -> None:
     seed_everything(42)
-    logger.info("=" * 65)
-    logger.info("  STARTING PHASE 2: CANONICAL ONNX EXPORT & PARITY AUDIT")
-    logger.info("=" * 65)
+    manifest = load_manifest(PROJECT_ROOT / "data" / "sample_images" / "manifest.json")
+    baselines = {m: json.loads((PROJECT_ROOT / "results" / "baselines" / f"{m}.json").read_text())["metrics"]
+                 for m in ("yolo_nano", "industrial_autoencoder")}
+    audit = {}
 
-    models_to_process = ["yolo_nano", "industrial_autoencoder"]
-    audit_summary = {}
-
-    for model_name in models_to_process:
-        logger.info(f"\n--- Processing {model_name} ---")
-
-        # 5. Numerical Equivalence Checks (PyTorch vs ORT)
+    for model_name in ("yolo_nano", "industrial_autoencoder"):
         if model_name == "yolo_nano":
-            adapter = YOLOAdapter()
-            pt_model = adapter.get_pytorch_model()
-            dummy_in = torch.randn(1, 3, 640, 640)
-            onnx_file = export_model_family(model_name, output_dir=PROJECT_ROOT / "models" / "exported", model_instance=pt_model)
+            pt_model = YOLOAdapter(require_weights=True).get_pytorch_model()
+            sample = preprocess_detection_image(PROJECT_ROOT / manifest["detection_samples"][0]["image_path"])[0]
+            metric = "mAP_50"
         else:
-            class AutoencoderWrapper(torch.nn.Module):
-                def __init__(self, core):
-                    super().__init__()
-                    self.core = core
+            pt_model = AutoencoderExportWrapper(IndustrialModelAdapter(require_weights=True).get_pytorch_model()).eval()
+            sample = preprocess_industrial_image(PROJECT_ROOT / manifest["industrial_samples"][-1]["image_path"])
+            metric = "image_auroc"
 
-                def forward(self, x):
-                    recon = self.core(x)
-                    a_map = torch.mean(torch.abs(x - recon), dim=1, keepdim=True)
-                    return recon, a_map
-
-            ind_adapter = IndustrialModelAdapter()
-            pt_model = AutoencoderWrapper(ind_adapter.get_pytorch_model())
-            dummy_in = torch.randn(1, 3, 256, 256)
-            onnx_file = export_model_family(model_name, output_dir=PROJECT_ROOT / "models" / "exported", model_instance=pt_model)
-
-        # 2. Validate Graph Structure
+        onnx_file = export_model_family(model_name, output_dir=PROJECT_ROOT / "models" / "exported", model_instance=pt_model)
         val_report = validate_onnx_graph(onnx_file)
-        logger.info(f"Graph validation passed (Opset: {val_report['opset_version']}, Nodes: {val_report['node_count']})")
-
-        # 3. Simplify Graph
         sim_file, sim_report = simplify_onnx_graph(onnx_file)
-
-        # 4. Inspect Simplified Graph
         inspect_report = inspect_onnx_graph(sim_file)
-
-        num_report = compare_pytorch_vs_onnx(pt_model, sim_file, dummy_in)
-        logger.info(f"Tensor numerical parity: {'PASS' if num_report['all_passed'] else 'FAIL'}")
-
-        # 6. Full Dataset Parity Evaluation
-        ds_report = evaluate_onnx_dataset(
-            model_name,
-            sim_file,
-            sample_manifest_path=PROJECT_ROOT / "data" / "sample_images" / "manifest.json",
-        )
-        logger.info(f"Dataset metric parity: {'PASS' if ds_report['parity_passed'] else 'FAIL'}")
-
-        audit_summary[model_name] = {
-            "validation": val_report,
-            "simplification": sim_report,
-            "inspection": inspect_report,
-            "numerical_equivalence": num_report,
-            "dataset_evaluation": ds_report,
+        num_report = compare_pytorch_vs_onnx(pt_model, sim_file, sample)
+        ds = evaluate_onnx_dataset(model_name, sim_file)
+        delta = ds["metrics"][metric] - baselines[model_name][metric]
+        audit[model_name] = {
+            "validation": val_report, "simplification": sim_report, "inspection": inspect_report,
+            "numerical_equivalence": num_report, "dataset": ds, "metric": metric,
+            "baseline": baselines[model_name][metric], "delta": delta,
+            "dataset_parity": abs(delta) <= 1e-3,
         }
+        logger.info(f"{model_name}: parity {'PASS' if num_report['all_passed'] else 'FAIL'}, "
+                    f"{metric} ONNX {ds['metrics'][metric]:.4f} vs PyTorch {baselines[model_name][metric]:.4f}")
 
-    # Generate Markdown Documentation Report
-    doc_path = PROJECT_ROOT / "docs" / "export-validation.md"
-    if not doc_path.is_file() or os.environ.get("FORCE_DOCS") == "1":
-        generate_export_validation_doc(audit_summary, doc_path)
-        logger.info(f"\nExport validation report rendered -> {doc_path}")
-    else:
-        logger.info(f"\nExport validation report up-to-date -> {doc_path}")
+    render_doc(audit, PROJECT_ROOT / "docs" / "export-validation.md")
+    (PROJECT_ROOT / "results" / "export_validation.json").write_text(json.dumps(audit, indent=2, default=str), encoding="utf-8")
+    failed = [m for m, a in audit.items() if not (a["numerical_equivalence"]["all_passed"] and a["dataset_parity"])]
+    if failed:
+        logger.error(f"Export validation failed for: {failed}")
+        sys.exit(1)
 
 
-def generate_export_validation_doc(audit_data: dict, output_path: Path) -> None:
-    yolo = audit_data["yolo_nano"]
-    ind = audit_data["industrial_autoencoder"]
-
-    md = f"""# Canonical ONNX Export & Numerical Parity Audit Report
-
-This report documents the verification, simplification, and numerical parity audits for the canonical ONNX models targeting **Opset 17**.
-
----
-
-## 1. Exported Graph Topology & Architecture
-
-| Model Identifier | Input Signature | Output Signature | Total Params | Model Size |
-| :--- | :--- | :--- | :--- | :--- |
-| **YOLO Nano Detector** | `images` [1, 3, 640, 640] | `output0` [1, 84, 8400] | {yolo['inspection']['total_parameters']:,} | {yolo['inspection']['file_size_mb']} MB |
-| **Industrial Autoencoder** | `input` [1, 3, 256, 256] | `reconstruction` [1, 3, 256, 256], `anomaly_map` [1, 1, 256, 256] | {ind['inspection']['total_parameters']:,} | {ind['inspection']['file_size_mb']} MB |
-
----
-
-## 2. Graph Simplification & Optimization Metrics
-
-| Model | Nodes Before | Nodes After | Nodes Eliminated | Reduction % | Checker Status |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **YOLO Nano** | {yolo['simplification']['nodes_before']} | {yolo['simplification']['nodes_after']} | {yolo['simplification']['nodes_eliminated']} | {yolo['simplification']['reduction_percentage']}% | `PASS` |
-| **Industrial Autoencoder** | {ind['simplification']['nodes_before']} | {ind['simplification']['nodes_after']} | {ind['simplification']['nodes_eliminated']} | {ind['simplification']['reduction_percentage']}% | `PASS` |
-
----
-
-## 3. Numerical Equivalence Gating (PyTorch FP32 vs. ONNX Runtime FP32)
-
-| Model Output Tensor | Max Absolute Error ($L_\\infty$) | Mean Absolute Error ($L_1$) | Cosine Similarity | Parity Gate |
-| :--- | :--- | :--- | :--- | :--- |
-"""
-    for out_name, stats in yolo["numerical_equivalence"]["outputs"].items():
-        md += f"| **yolo_nano -> {out_name}** | `{stats['max_abs_error']:.2e}` | `{stats['mean_abs_error']:.2e}` | `{stats['cosine_similarity']:.6f}` | `PASS` |\n"
-
-    for out_name, stats in ind["numerical_equivalence"]["outputs"].items():
-        md += f"| **industrial_autoencoder -> {out_name}** | `{stats['max_abs_error']:.2e}` | `{stats['mean_abs_error']:.2e}` | `{stats['cosine_similarity']:.6f}` | `PASS` |\n"
-
-    md += f"""
----
-
-## 4. Full Dataset Task Quality Equivalence
-
-| Model | Evaluated Metric | PyTorch FP32 Baseline | ONNX Runtime FP32 | Delta ($|\\Delta|$) | Status |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **YOLO Nano** | **mAP@50** | `{yolo['dataset_evaluation']['baseline_metrics']['mAP_50']}` | `{yolo['dataset_evaluation']['metrics']['mAP_50']}` | `{yolo['dataset_evaluation']['delta_mAP_50']}` | `PASS` |
-| **Industrial Autoencoder** | **Image AUROC** | `{ind['dataset_evaluation']['baseline_metrics']['image_auroc']}` | `{ind['dataset_evaluation']['metrics']['image_auroc']}` | `{ind['dataset_evaluation']['delta_auroc']}` | `PASS` |
-
----
-
-## 5. Artifact Inventory
-
-- `models/exported/yolo_nano_fp32_opset17.onnx` (`SHA-256`: `{yolo['simplification']['sha256']}`)
-- `models/exported/industrial_autoencoder_fp32_opset17.onnx` (`SHA-256`: `{ind['simplification']['sha256']}`)
-"""
-    output_path.write_text(md, encoding="utf-8")
+def render_doc(audit: dict, output_path: Path) -> None:
+    gate = next(iter(audit.values()))["numerical_equivalence"]["gate"]
+    md = ["# ONNX Export & Numerical Parity Report", "",
+          "Generated by `scripts/export_and_validate.py`. Reference: trained PyTorch FP32 model on CPU; candidate: "
+          "simplified ONNX graph (opset 17) on ONNX Runtime `CPUExecutionProvider`.", "",
+          "## 1. Exported graphs", "",
+          "| Model | Inputs | Outputs | Parameters | File size (MB) | IR / opset |", "| --- | --- | --- | --- | --- | --- |"]
+    for m, a in audit.items():
+        i = a["inspection"]
+        ins = ", ".join(f"`{x['name']}` {x['dims']}" for x in i["inputs"])
+        outs = ", ".join(f"`{x['name']}` {x['dims']}" for x in i["outputs"])
+        md.append(f"| `{m}` | {ins} | {outs} | {i['total_parameters']:,} | {i['file_size_mb']} | "
+                  f"{a['validation']['ir_version']} / {a['validation']['opset_version']} |")
+    md += ["", "## 2. Graph simplification (onnxsim)", "", "| Model | Nodes before | Nodes after | Reduction | onnxsim check |",
+           "| --- | --- | --- | --- | --- |"]
+    for m, a in audit.items():
+        s = a["simplification"]
+        md.append(f"| `{m}` | {s['nodes_before']} | {s['nodes_after']} | {s['reduction_percentage']}% | "
+                  f"{'PASS' if s['check_ok'] else 'FAIL'} |")
+    md += ["", f"## 3. Output parity on a real test image (gate: max rel. error <= {gate['max_rel_error']:g}, "
+           f"cosine >= {gate['min_cosine_similarity']})", "",
+           "| Output | Max abs. error | Mean abs. error | Max rel. error | Cosine similarity | Gate |", "| --- | --- | --- | --- | --- | --- |"]
+    for m, a in audit.items():
+        for out, d in a["numerical_equivalence"]["outputs"].items():
+            md.append(f"| `{m}` / `{out}` | {d['max_abs_error']:.3e} | {d['mean_abs_error']:.3e} | {d['max_rel_error']:.3e} | "
+                      f"{d['cosine_similarity']:.8f} | {'PASS' if d['passed'] else 'FAIL'} |")
+    md += ["", "## 4. Test-split task metric: PyTorch FP32 vs ONNX Runtime FP32", "",
+           "| Model | Metric | PyTorch | ONNX Runtime | Delta | Parity (abs. delta <= 0.001) |", "| --- | --- | --- | --- | --- | --- |"]
+    for m, a in audit.items():
+        md.append(f"| `{m}` | {a['metric']} | {a['baseline']:.4f} | {a['dataset']['metrics'][a['metric']]:.4f} | "
+                  f"{a['delta']:+.4f} | {'PASS' if a['dataset_parity'] else 'FAIL'} |")
+    md += ["", "## 5. Artifacts", ""]
+    for m, a in audit.items():
+        md.append(f"- `models/exported/{a['inspection']['file_name']}` (SHA-256 `{a['simplification']['sha256']}`)")
+    output_path.write_text("\n".join(md) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

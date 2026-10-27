@@ -1,168 +1,88 @@
 """
-Publication Markdown Table Reporting Subsystem.
+Markdown report tables generated from the aggregated session DataFrame (results/runs.csv).
+Gate verdicts are read from the run records; nothing is re-thresholded here.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, List
 import pandas as pd
 
 
-def generate_table1_numerical_correctness(df: pd.DataFrame, output_path: Path) -> str:
-    """Generates Table 1: Numerical Correctness & Equivalence."""
+def _fmt(v: float, spec: str) -> str:
+    return "n/a" if pd.isna(v) else format(float(v), spec)
+
+
+def _write(headers: List[str], rows: List[List[str]], output_path: Path) -> str:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    headers = ["Model", "Runtime", "Provider", "Precision", "Max Abs Error ($L_\\infty$)", "Mean Abs Error ($L_1$)", "Cosine Sim", "Quality Delta", "Gate Status"]
-    rows: List[str] = [f"| {' | '.join(headers)} |", f"| {' | '.join(['---'] * len(headers))} |"]
-
-    for _, r in df.iterrows():
-        precision_lower = str(r.get("precision", "")).lower()
-        max_abs = float(r.get("max_abs_error", 0.0))
-        cos_sim = float(r.get("cosine_similarity", 1.0))
-        qual_delta = abs(float(r.get("quality_delta", 0.0)))
-
-        if "int8" in precision_lower:
-            # INT8 passes if task quality drop <= 0.015 and cosine similarity >= 0.99
-            passed = (qual_delta <= 0.015) and (cos_sim >= 0.99) and (max_abs <= 0.50)
-        elif "fp16" in precision_lower:
-            passed = (max_abs <= 0.05) and (cos_sim >= 0.999) and (qual_delta <= 0.005)
-        else:
-            # FP32 strict numerical equivalence
-            passed = (max_abs <= 0.02) and (cos_sim >= 0.9999) and (qual_delta <= 0.0005)
-
-        status_icon = "✅ PASS" if passed else "❌ FAIL"
-        row_str = (
-            f"| {r.get('model', 'N/A')} "
-            f"| {r.get('runtime', 'N/A')} "
-            f"| {r.get('provider', 'N/A')} "
-            f"| {str(r.get('precision', 'N/A')).upper()} "
-            f"| {max_abs:.4e} "
-            f"| {float(r.get('mean_abs_error', 0.0)):.4e} "
-            f"| {cos_sim:.6f} "
-            f"| {float(r.get('quality_delta', 0.0)):+.4f} "
-            f"| {status_icon} |"
-        )
-        rows.append(row_str)
-
-    content = "\n".join(rows)
+    lines = [f"| {' | '.join(headers)} |", f"| {' | '.join(['---'] * len(headers))} |"]
+    lines += [f"| {' | '.join(r)} |" for r in rows]
+    content = "\n".join(lines) + "\n"
     output_path.write_text(content, encoding="utf-8")
     return content
+
+
+def _cfg(r: pd.Series) -> List[str]:
+    return [str(r["model"]), str(r["runtime"]), str(r["provider"]), str(r["precision"]).upper()]
+
+
+def generate_table1_numerical_correctness(df: pd.DataFrame, output_path: Path) -> str:
+    """Table 1: output parity vs PyTorch FP32 CPU (all output tensors, real test image)."""
+    headers = ["Model", "Runtime", "Provider", "Precision", "Max abs. error", "Max rel. error", "Min cosine sim.", "Parity gate"]
+    rows = [_cfg(r) + [_fmt(r["max_abs_error"], ".3e"), _fmt(r["max_rel_error"], ".3e"), _fmt(r["cosine_similarity"], ".6f"),
+                       "PASS" if r["numerical_gate"] else "FAIL"] for _, r in df.iterrows()]
+    return _write(headers, rows, output_path)
 
 
 def generate_table2_latency_throughput(df: pd.DataFrame, output_path: Path) -> str:
-    """Generates Table 2: Batch-1 Latency & Throughput."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    headers = ["Model", "Runtime", "Provider", "Precision", "Model $p_{50}$ (ms)", "Model $p_{90}$ (ms)", "Model $p_{95}$ (ms)", "Model $p_{99}$ (ms)", "E2E $p_{50}$ (ms)", "Model FPS", "E2E FPS"]
-    rows: List[str] = [f"| {' | '.join(headers)} |", f"| {' | '.join(['---'] * len(headers))} |"]
-
-    for _, r in df.iterrows():
-        row_str = (
-            f"| {r.get('model', 'N/A')} "
-            f"| {r.get('runtime', 'N/A')} "
-            f"| {r.get('provider', 'N/A')} "
-            f"| {str(r.get('precision', 'N/A')).upper()} "
-            f"| {float(r.get('p50_model_ms', 0.0)):.2f} "
-            f"| {float(r.get('p90_model_ms', 0.0)):.2f} "
-            f"| {float(r.get('p95_model_ms', 0.0)):.2f} "
-            f"| {float(r.get('p99_model_ms', 0.0)):.2f} "
-            f"| {float(r.get('p50_e2e_ms', 0.0)):.2f} "
-            f"| {float(r.get('model_throughput_fps', 0.0)):.1f} "
-            f"| {float(r.get('e2e_throughput_fps', 0.0)):.1f} |"
-        )
-        rows.append(row_str)
-
-    content = "\n".join(rows)
-    output_path.write_text(content, encoding="utf-8")
-    return content
+    """Table 2: batch-1 latency (pooled over sessions) with bootstrap CI and stability verdict."""
+    headers = ["Model", "Runtime", "Provider", "Precision", "Model p50 (ms) [95% CI]", "Model p95 (ms)", "Model p99 (ms)",
+               "E2E p50 (ms)", "Model FPS (1/p50)", "Session CV", "Stable (CV<=0.05)"]
+    rows = [_cfg(r) + [f"{r['p50_model_ms']:.3f} [{r['p50_model_ci_low_ms']:.3f}, {r['p50_model_ci_high_ms']:.3f}]",
+                       _fmt(r["p95_model_ms"], ".3f"), _fmt(r["p99_model_ms"], ".3f"), _fmt(r["p50_e2e_ms"], ".2f"),
+                       _fmt(r["model_throughput_fps"], ".1f"), _fmt(r["cv_p50"], ".3f"), "yes" if r["stable"] else "no"]
+            for _, r in df.iterrows()]
+    return _write(headers, rows, output_path)
 
 
 def generate_table3_memory_footprint(df: pd.DataFrame, output_path: Path) -> str:
-    """Generates Table 3: Memory Allocations & Storage Footprint."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    headers = ["Model", "Runtime", "Provider", "Precision", "Peak VRAM (MB)", "Peak Reserved VRAM (MB)", "Process RSS (MB)", "Model Disk Size (MB)", "Storage Red. %"]
-    rows: List[str] = [f"| {' | '.join(headers)} |", f"| {' | '.join(['---'] * len(headers))} |"]
-
+    """Table 3: memory and artifact size."""
+    headers = ["Model", "Runtime", "Provider", "Precision", "Peak PyTorch VRAM alloc. (MB)", "Process RSS (MB)",
+               "Model size (MB)", "Size source", "Size vs FP32 ONNX"]
+    rows = []
     for _, r in df.iterrows():
-        row_str = (
-            f"| {r.get('model', 'N/A')} "
-            f"| {r.get('runtime', 'N/A')} "
-            f"| {r.get('provider', 'N/A')} "
-            f"| {str(r.get('precision', 'N/A')).upper()} "
-            f"| {float(r.get('peak_vram_mb', 0.0)):.2f} "
-            f"| {float(r.get('peak_vram_reserved_mb', 0.0)):.2f} "
-            f"| {float(r.get('process_rss_mb', 0.0)):.2f} "
-            f"| {float(r.get('model_size_mb', 0.0)):.2f} "
-            f"| {float(r.get('storage_compression_pct', 0.0)):.1f}% |"
-        )
-        rows.append(row_str)
-
-    content = "\n".join(rows)
-    output_path.write_text(content, encoding="utf-8")
-    return content
+        vram = _fmt(r["peak_vram_mb"], ".2f") if r["runtime"] == "PyTorch" and "CUDA" in str(r["provider"]) else "n/a"
+        red = "n/a" if pd.isna(r["storage_compression_pct"]) else f"{-r['storage_compression_pct']:+.1f}%"
+        rows.append(_cfg(r) + [vram, _fmt(r["process_rss_mb"], ".0f"), _fmt(r["model_size_mb"], ".2f"),
+                               str(r["model_size_source"]).replace("_", " "), red])
+    return _write(headers, rows, output_path)
 
 
 def generate_table4_quality_retention(df: pd.DataFrame, output_path: Path) -> str:
-    """Generates Table 4: Precision & Task Quality Retention."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    headers = ["Model", "Runtime", "Provider", "Precision", "Metric", "Metric Value", "Quality $\\Delta$", "Verdict"]
-    rows: List[str] = [f"| {' | '.join(headers)} |", f"| {' | '.join(['---'] * len(headers))} |"]
-
-    for _, r in df.iterrows():
-        passed = bool(r.get("quality_passed", True))
-        verdict = "✅ ACCEPTABLE" if passed else "❌ DEGRADED"
-        row_str = (
-            f"| {r.get('model', 'N/A')} "
-            f"| {r.get('runtime', 'N/A')} "
-            f"| {r.get('provider', 'N/A')} "
-            f"| {str(r.get('precision', 'N/A')).upper()} "
-            f"| {r.get('quality_metric', 'N/A')} "
-            f"| {float(r.get('quality_value', 0.0)):.4f} "
-            f"| {float(r.get('quality_delta', 0.0)):+.4f} "
-            f"| {verdict} |"
-        )
-        rows.append(row_str)
-
-    content = "\n".join(rows)
-    output_path.write_text(content, encoding="utf-8")
-    return content
+    """Table 4: task quality measured with each runtime on the full test split."""
+    headers = ["Model", "Runtime", "Provider", "Precision", "Metric", "Value", "FP32 reference", "Delta", "Quality gate"]
+    rows = [_cfg(r) + [str(r["quality_metric"]), _fmt(r["quality_value"], ".4f"), _fmt(r["quality_reference"], ".4f"),
+                       _fmt(r["quality_delta"], "+.4f"), "PASS" if r["quality_passed"] else "FAIL"] for _, r in df.iterrows()]
+    return _write(headers, rows, output_path)
 
 
-def generate_table5_int8_audit(df: pd.DataFrame, output_path: Path) -> str:
-    """Generates Table 5: Static INT8 Quantization Audit."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    
-    headers = ["Model", "Runtime", "Provider", "Calibration Method", "Size Reduction %", "Compute Speedup", "Quality Delta", "Deployable"]
-    rows: List[str] = [f"| {' | '.join(headers)} |", f"| {' | '.join(['---'] * len(headers))} |"]
-
-    int8_df = df[df["precision"] == "int8"].copy()
-    if int8_df.empty:
-        rows.append("| N/A | No INT8 models found | N/A | N/A | 0.0% | 1.0x | 0.0 | N/A |")
-    else:
-        for _, r in int8_df.iterrows():
-            speedup = float(r.get("speedup_model", 1.0))
-            delta = float(r.get("quality_delta", 0.0))
-            deployable = "✅ YES" if abs(delta) <= 0.05 else "⚠️ EVALUATE"
-            row_str = (
-                f"| {r.get('model', 'N/A')} "
-                f"| {r.get('runtime', 'N/A')} "
-                f"| {r.get('provider', 'N/A')} "
-                f"| MinMax Symmetric "
-                f"| {float(r.get('storage_compression_pct', 0.0)):.1f}% "
-                f"| {speedup:.1f}x "
-                f"| {delta:+.4f} "
-                f"| {deployable} |"
-            )
-            rows.append(row_str)
-
-    content = "\n".join(rows)
-    output_path.write_text(content, encoding="utf-8")
-    return content
+def generate_table5_int8_audit(df: pd.DataFrame, output_path: Path, quant_method: str = "Static QDQ, MinMax, symmetric, per-channel weights") -> str:
+    """Table 5: reduced-precision artifacts vs the same runtime's FP32."""
+    headers = ["Model", "Runtime", "Precision", "Method", "Size vs FP32 ONNX", "Speedup vs same-runtime FP32",
+               "Quality delta", "Gates"]
+    rows = []
+    for _, r in df[df["precision"].isin(["fp16", "int8"])].iterrows():
+        method = quant_method if r["precision"] == "int8" else "FP16 cast (onnxconverter-common, FP32 I/O)"
+        red = "n/a" if pd.isna(r["storage_compression_pct"]) else f"{-r['storage_compression_pct']:+.1f}%"
+        gates = "PASS" if (r["numerical_gate"] and r["quality_passed"]) else "FAIL"
+        rows.append([str(r["model"]), f"{r['runtime']} ({r['provider']})", str(r["precision"]).upper(), method, red,
+                     _fmt(r["speedup_vs_runtime_fp32"], ".2f") + "x", _fmt(r["quality_delta"], "+.4f"), gates])
+    if not rows:
+        rows.append(["n/a"] * len(headers))
+    return _write(headers, rows, output_path)
 
 
 def generate_all_tables(df: pd.DataFrame, output_dir: Path) -> None:
-    """Generates all 5 Markdown report tables in results/tables/."""
+    """Generates tables 1-5 in output_dir."""
     output_dir.mkdir(parents=True, exist_ok=True)
     generate_table1_numerical_correctness(df, output_dir / "table1_numerical_correctness.md")
     generate_table2_latency_throughput(df, output_dir / "table2_latency_throughput.md")

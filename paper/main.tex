@@ -3,31 +3,25 @@
 
 \usepackage{cite}
 \usepackage{amsmath,amssymb,amsfonts}
-\usepackage{algorithmic}
 \usepackage{graphicx}
 \usepackage{textcomp}
 \usepackage{xcolor}
 \usepackage{booktabs}
-\usepackage{multirow}
 \usepackage[caption=false,font=footnotesize]{subfig}
 \usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
 
-\hypersetup{
-    colorlinks=true,
-    linkcolor=blue,
-    filecolor=magenta,      
-    urlcolor=cyan,
-    citecolor=blue
-}
+% Every measured number in this manuscript is a macro generated from results/ by scripts/build_paper.py.
+\input{generated/results.tex}
 
 \begin{document}
 
-\title{Q-Aware Post-Processing and Rigorous Latency Profiling for Quantized Edge Vision Inference}
+\title{Measuring What Quantization Changes: A Reproducible Latency, Parity and Quality Benchmark of PyTorch and ONNX Runtime for Edge Vision Models}
 
 \author{
 \IEEEauthorblockN{Utkarsh Sengar}
 \IEEEauthorblockA{\textit{Department of Computer Science and Engineering} \\
-\textit{Indian Institute of Technology Dharwad} \\
+\textit{Indian Institute of Technology Dharwad}\\
 Dharwad, Karnataka, India \\
 cs23bt026@iitdh.ac.in}
 }
@@ -35,247 +29,281 @@ cs23bt026@iitdh.ac.in}
 \maketitle
 
 \begin{abstract}
-Deploying deep neural networks to resource-constrained edge devices requires aggressive quantization and runtime graph optimization. However, static 8-bit post-training quantization (INT8 PTQ) introduces logit and coordinate regression drift that degrades task-level quality when processed with static Non-Maximum Suppression (NMS) thresholds. We introduce Quantization-Aware NMS (Q-Aware NMS), a calibration-based post-processing adaptation that dynamically tunes suppression thresholds $(\tau_{\text{conf}}, \tau_{\text{iou}})$ per precision and execution provider under latency budgets. We evaluate Q-Aware NMS alongside an 11-stage edge inference benchmarking pipeline spanning PyTorch and ONNX Runtime backends on an NVIDIA RTX 4050 testbed. Our framework introduces Quantization Decision-Change Attribution to partition detection flip rates $\Phi$ into lost true positives versus spurious false positives, computes non-parametric 95\% bootstrap confidence intervals ($B=2{,}000$), and profiles multi-dimensional scalability across batch sizes (1--8) and spatial resolutions (320--640). Q-Aware NMS recovers task-level $F_1$ degradation from INT8 quantization by $+4.2\%$ with negligible post-processing overhead ($<0.12$ ms), providing an empirical methodology for quality-retaining edge vision deployment.
+Choosing a runtime and numeric precision for an edge vision model is usually justified by latency alone. We present
+an open, fully regenerable benchmark that measures, for every (model, runtime, precision) configuration, pooled latency
+percentiles with bootstrap confidence intervals and a between-session stability verdict, a measured end-to-end stage
+breakdown, the numerical parity of all outputs against a PyTorch FP32 reference, and task quality re-evaluated through
+the runtime itself, against acceptance gates fixed before the run. Evaluating a compact anchor-free detector and a
+convolutional autoencoder, both trained from scratch, in PyTorch (CPU, GPU) and ONNX Runtime (CPU) at FP32, FP16 and
+static INT8, we find that INT8 is model-dependent ($\res{det-ort-cpu-int8-speedupfp}\times$ faster and
+$\res{det-ort-cpu-int8-sizered}$\% smaller for the detector, but only $\res{ae-ort-cpu-int8-speedupfp}\times$ for the
+autoencoder), that default TF32 GPU math breaks FP32 parity, and that host-side pre- and post-processing dominate the
+detector's end-to-end latency ($\res{det-pt-gpu-fp32-e2e}$\,ms versus $\res{det-pt-gpu-fp32-p50}$\,ms model path).
+We also test quantization-aware NMS calibration: re-tuning post-processing thresholds raises detection $F_1$ from
+$\res{qa0-f1def}$ to $\res{qa0-f1cal}$ for every precision, but INT8-specific thresholds give no significant gain
+over reusing the FP32-calibrated ones ($\Delta F_1 = \res{qa3-dtr}$, 95\% CI [$\res{qa3-dtrlo}$, $\res{qa3-dtrhi}$]),
+while decision-flip attribution shows that INT8 changes $\res{fl3-cal-rate}$ of individual detection decisions.
 \end{abstract}
 
 \begin{IEEEkeywords}
-Edge Inference, Model Optimization, Static INT8 PTQ, ONNX Runtime, Quantization-Aware NMS, Decision-Change Attribution.
+Edge inference, ONNX Runtime, post-training quantization, benchmarking methodology, object detection, anomaly detection
 \end{IEEEkeywords}
 
 \section{Introduction}
-Real-time vision inference on edge platforms demands strict compliance with tail-latency bounds, thermal envelopes, and limited host memory~\cite{jacob2018quantization,deng2020model}. To meet these constraints, practitioners routinely employ Post-Training Quantization (PTQ) to convert 32-bit floating-point weights and activations into compact 8-bit integers (INT8)~\cite{nagel2021white,gholami2022survey}. While INT8 quantization dramatically reduces memory bandwidth and unlocks high-throughput vectorized integer execution units, the associated rounding noise and dynamic range truncation induce tensor-level logit drift~\cite{krishnamoorthi2018quantizing}.
+Deploying a vision model means choosing a runtime and a numeric precision, and the choice is usually justified by
+latency numbers alone. Two things are easy to get wrong in that process. First, latency on a general-purpose host is
+noisy: medians move between measurement sessions, and a single session can make an optimization look better or
+worse than it is. Second, lower precision changes \emph{decisions}, not only tensors: for a detector, a small logit
+drift can push boxes across the confidence threshold or past non-maximum suppression (NMS), which an aggregate metric
+such as mAP may hide.
 
-In dense object detection architectures~\cite{redmon2018yolov3}, this quantization drift perturbs bounding-box regression coordinates and suppresses class confidence logits. In standard deployment workflows, models are combined with static Non-Maximum Suppression (NMS) thresholds~\cite{neubeck2006efficient,bodla2017soft} $(\tau_{\text{conf}} = 0.25, \tau_{\text{iou}} = 0.45)$ that were tuned exclusively on unquantized FP32 outputs. When applied to quantized outputs, these static thresholds cause systemic quality degradation: valid detections near the confidence boundary are discarded (elevated false negatives), while coordinate jitter causes redundant bounding boxes to escape overlap suppression (elevated false positives).
+This paper presents an open benchmark that treats latency, numerical parity and task quality as one measurement.
+For every (model, runtime, precision) configuration it reports pooled latency percentiles with bootstrap confidence
+intervals and a between-session stability verdict, a measured end-to-end stage breakdown, the parity of every output
+tensor against a PyTorch FP32 reference, and the task metric re-evaluated through that exact runtime, each checked
+against acceptance thresholds fixed in configuration files before the run. On top of this we evaluate
+\emph{Q-Aware NMS}---re-selecting the post-processing thresholds per precision on a labeled calibration split---and
+\emph{decision-flip attribution}, which decomposes how reduced precision changes individual detections.
 
-To resolve this deficiency without expensive retraining, we introduce \textbf{Quantization-Aware Non-Maximum Suppression (Q-Aware NMS)}, a post-processing calibration framework that jointly calibrates confidence and overlap suppression thresholds on disjoint calibration splits. Furthermore, we develop a comprehensive systems-level benchmarking artifact covering latency distributions, memory footprints, tail stability, decision flips, and scalability sweeps across PyTorch~\cite{paszke2019pytorch} and ONNX Runtime (ORT)~\cite{onnxruntime2026}.
+Contributions: (i) a session-based protocol and open implementation in which every reported number is regenerated
+by one command; (ii) an evaluation of FP32, FP16 and static INT8 inference in PyTorch and ONNX Runtime~\cite{onnxruntime}
+for a compact anchor-free detector and a convolutional autoencoder; (iii) a statistically tested assessment of
+per-precision threshold calibration; and (iv) a detection-level flip analysis of quantization.
 
-Specifically, this paper makes the following five contributions:
-\begin{enumerate}
-    \item \textbf{Quantization-Aware Post-Processing (Q-Aware NMS)}: We formulate a 2D grid calibration policy $(\tau_{\text{conf}}^*, \tau_{\text{iou}}^*)$ that maximizes task-level $F_1$-score under execution latency constraints, recovering up to $+4.2\%$ $F_1$ on INT8 models with negligible post-processing cost ($<0.12$ ms).
-    \item \textbf{Quantization Decision-Change Attribution}: We define the Detection Flip Rate $\Phi$ to quantify discrete prediction switches caused by precision reduction, partitioning detection flip rates $\Phi$ into lost True Positives (TP) and spurious False Positives (FP).
-    \item \textbf{Dual-Mode Timing and Statistical Filtering}: We implement an OS-aware timing protocol combining paired CUDA events, monotonic CPU counters with L3 cache flushes, Median Absolute Deviation (MAD) outlier filtering ($CV \le 0.04$), and 95\% non-parametric bootstrap confidence intervals~\cite{efron1994introduction} ($B=2{,}000$).
-    \item \textbf{Empirical Quality-Latency Pareto Auditing}: We execute an 11-stage open-source benchmark pipeline evaluating YOLO Nano and Industrial ConvAutoencoder across FP32, FP16, and INT8 backends, identifying the authoritative Pareto frontier.
-    \item \textbf{Multi-Dimensional Scalability Sweeps}: We profile latency and throughput scaling across batch sizes $\{1, 2, 4, 8\}$ and input resolutions $\{320, 416, 512, 640\}$, establishing memory footprint bounds and throughput limits on edge silicon.
-\end{enumerate}
+All models are trained from scratch on procedurally generated data, and all measurements come from a single laptop
+workstation. The results therefore characterize the runtimes and the methodology, not real-world accuracy or embedded
+hardware; Section~\ref{sec:threats} discusses these limits.
 
 \section{Related Work}
+\textbf{Quantization.} Integer quantization maps tensors to 8-bit values via a scale and zero point~\cite{jacob2018quantization}.
+Post-training quantization (PTQ) calibrates the ranges on a small dataset without retraining and is the common
+deployment path~\cite{krishnamoorthi2018quantizing,nagel2021white,gholami2022survey}; surveys of compression and
+acceleration discuss the resulting accuracy--efficiency trade-offs~\cite{deng2020model}.
+\textbf{Dense detection.} One-stage detectors predict boxes on a dense grid~\cite{redmon2018yolov3,tian2019fcos} and
+rely on NMS~\cite{neubeck2006efficient,bodla2017soft}; focal and quality-aware classification losses~\cite{lin2017focal,li2020gfl}
+and IoU-based regression losses~\cite{rezatofighi2019giou} are standard. Evaluation follows the COCO protocol~\cite{lin2014coco}.
+\textbf{Anomaly detection.} Reconstruction-based models score defects by reconstruction error and are evaluated with
+image AUROC and the per-region-overlap (PRO) curve~\cite{bergmann2019mvtec}.
+\textbf{Measurement.} Robust statistics such as the median absolute deviation~\cite{leys2013detecting}, bootstrap
+confidence intervals~\cite{efron1994introduction} and rank tests with family-wise error control~\cite{wilcoxon1945individual,holm1979simple}
+are standard tools that inference benchmarks rarely report.
 
-\subsection{Neural Network Quantization: PTQ vs. QAT}
-Model quantization maps continuous weights and activations $x \in [\alpha, \beta]$ to discrete integer buckets $q \in [-128, 127]$ via scale $S$ and zero-point $Z$: $q = \text{clamp}(\lfloor x/S \rceil + Z)$~\cite{jacob2018quantization}. Quantization-Aware Training (QAT) simulates rounding noise during training via straight-through estimators, yielding high retention at the expense of substantial computational retraining cost~\cite{nagel2021white}. In contrast, Post-Training Quantization (PTQ) calibrates scales offline using small representative datasets, making it the industry standard for fast edge deployment~\cite{krishnamoorthi2018quantizing,gholami2022survey}. However, static INT8 PTQ often suffers from outlier-induced dynamic range clipping, degrading task performance when coupled with uncalibrated post-processing.
+\section{Benchmark Design}
 
-\subsection{Detection Post-Processing and NMS}
-Object detection architectures generate redundant bounding boxes across spatial anchors. Non-Maximum Suppression (NMS) filters low-confidence candidates below $\tau_{\text{conf}}$ and iteratively suppresses overlapping boxes exceeding intersection-over-union threshold $\tau_{\text{iou}}$~\cite{neubeck2006efficient}. While algorithmic variants like Soft-NMS~\cite{bodla2017soft} decay scores continuously rather than using hard pruning, they increase post-processing latency. Crucially, prior works treat NMS hyperparameters as fixed architectural constants rather than precision-dependent optimization targets.
+\subsection{Workloads and data}
+The \textbf{detector} is a compact anchor-free network (\res{det-params}\,M parameters): a five-stage strided
+Conv-BN-SiLU backbone and three heads at strides 8/16/32 that predict per-location (left, top, right, bottom)
+distances~\cite{tian2019fcos}, decoded inside the exported graph to an output of shape $[1, 4{+}2, 8400]$ for a
+$640{\times}640$ input. It is trained for \res{det-trainsteps} steps with a quality focal loss~\cite{li2020gfl} and a
+GIoU loss~\cite{rezatofighi2019giou}. The \textbf{autoencoder} (\res{ae-params}\,M parameters) has a four-stage
+strided-convolution encoder, a $1{\times}1$ bottleneck and a transposed-convolution decoder; it is trained for
+\res{ae-trainsteps} steps on defect-free textures only, and its anomaly map is the per-pixel mean absolute
+reconstruction error.
 
-\subsection{Empirical Systems Benchmarking on Edge Hardware}
-Benchmarking edge inference engines requires rigorous isolation of warmup transients, GPU frequency throttling, and host memory paging~\cite{deng2020model}. Prior studies often report naive wall-clock averages that confound compute with data movement. Our work establishes a standardized, reproducible profiling pipeline utilizing paired hardware events and robust non-parametric statistical hypothesis testing~\cite{wilcoxon1945individual,holm1979simple}.
+Data are procedural: two-class shapes (rectangles and ellipses) with unlabeled distractors on noisy textured
+backgrounds of four resolutions, and sinusoidal surface textures with scratch, stain and texture-dropout defects with
+pixel masks. Train, validation, calibration and test splits come from disjoint seed ranges, and calibration/test file
+overlap is verified to be zero. The validation split is used only to select the anomaly-score smoothing
+($\sigma{=}\res{ae-sigma}$\,px Gaussian, mean of the top \res{ae-topk}\% pixels). The test split contains
+\res{qa-test-images} detection images (\res{qa-test-boxes} boxes) and 100 normal plus 100 anomalous textures.
 
-\section{Experimental Testbed \& System Architecture}
+\subsection{Artifacts and runtimes}
+Models are exported to ONNX (opset 17) and simplified; FP16 graphs keep FP32 inputs and outputs; INT8 graphs use ONNX
+Runtime static QDQ quantization with MinMax calibration on the calibration split, per-channel symmetric weights, and
+Conv, ConvTranspose, MatMul and Gemm quantized. The matrix covers PyTorch eager on CPU and CUDA (FP32, FP16) and ONNX
+Runtime on CPU (FP32, FP16, INT8). ONNX Runtime CUDA and TensorRT back ends are implemented and are run automatically
+when available; neither was available on the benchmark host.
 
-\subsection{Hardware and Execution Environment}
-All experiments are executed on a dedicated edge-workstation testbed:
-\begin{itemize}
-    \item \textbf{Host Processor}: Intel Core i7 Processor (8 physical cores, 16 logical threads), 11.54 GB allocatable host RAM.
-    \item \textbf{Edge Accelerator}: NVIDIA GeForce RTX 4050 Laptop GPU (Ada Lovelace architecture, 6.0 GB GDDR6 VRAM, Compute Capability 8.9, NVIDIA Display Driver 581.86, CUDA 12.1, cuDNN 91002).
-    \item \textbf{Software Stack}: Ubuntu 22.04 LTS on Windows Subsystem for Linux 2 (kernel 6.6.87.2-microsoft-standard-WSL2), Python 3.13.9, PyTorch 2.5.1+cu121, ONNX Runtime 1.23.2.
-\end{itemize}
+\subsection{Measurement protocol}
+\textbf{Model-path latency} is measured on device-resident inputs: per session, \res{proto-warmupiterations} untimed
+and \res{proto-timediterations} timed passes with garbage collection disabled, timed with CUDA events on GPU (the
+call does not synchronize the host) and \texttt{perf\_counter\_ns} on CPU. Each configuration runs
+\res{proto-stabilitysessions} sessions separated by a cache-eviction write and a cooldown; if the coefficient of
+variation (CV) of the session medians exceeds 0.04, two supplemental sessions are added once. Percentiles are computed
+over the pooled iterations with percentile-bootstrap 95\% CIs ($B{=}2000$), and a configuration is \emph{stable} if
+the CV of all session medians is at most 0.05.
+\textbf{End-to-end latency} times decoding, preprocessing, inference through the host-array API (including
+host--device copies) and post-processing separately over \res{proto-e2etimediterations} iterations.
+\textbf{Parity} compares all output tensors with PyTorch FP32 on CPU for a real test image (maximum relative error
+and cosine similarity), and \textbf{quality} re-evaluates the full test split through the runtime under test.
+Acceptance thresholds per precision tier are fixed in configuration files (relative error $10^{-4}/5{\cdot}10^{-3}/0.1$;
+quality drop $0.001/0.005/0.02$ for FP32/FP16/INT8).
 
-\subsection{Single-Stream Edge Constraint}
-To mirror real-time reactive vision deployments (e.g., automated visual inspection, mobile robotics), our baseline evaluations operate strictly under single-stream processing ($\text{Batch Size} = 1$). All ONNX models enforce static tensor shapes to eliminate dynamic reallocation overheads.
+\subsection{Q-Aware NMS and decision flips}
+For each detector configuration, raw outputs on the calibration split (\res{qa-calib-images} images) are cached and
+$(\tau_c^*, \tau_i^*) = \arg\max F_1$ is searched over $\tau_c \in \{0.10,\dots,0.95\}$ and
+$\tau_i \in \{0.05,\dots,0.70\}$ in steps of 0.05 (252 points); ties keep the default $(0.25, 0.45)$. On the test split we
+report micro-$F_1$ at both operating points, a paired image-level bootstrap 95\% CI of $\Delta F_1$, and a two-sided
+Wilcoxon signed-rank test on per-image error counts (false positives + false negatives), Holm--Bonferroni corrected
+across configurations.
 
-\subsection{Workload Taxonomy}
-We evaluate two complementary edge vision tasks:
-\begin{enumerate}
-    \item \textbf{YOLO Nano Object Detector}: A lightweight anchorless detector with 80 classes, taking $3 \times 640 \times 640$ inputs and producing dense output tensors of dimension $[1, 84, 8400]$ (4 box regression values and 80 class logits over 8,400 anchors).
-    \item \textbf{Industrial ConvAutoencoder}: A 4-stage convolutional autoencoder for unsupervised industrial defect inspection~\cite{bergmann2019mvtec}. Operating on $1 \times 256 \times 256$ grayscale images, the model compresses inputs through latent representations and reconstructs defect-free baselines, scoring anomalies via top-1\% pixel-wise mean squared error residual thresholds.
-\end{enumerate}
+Decision flips compare a configuration's detections with those of the PyTorch FP32 reference. Boxes are matched
+greedily in score order (IoU $\ge 0.5$, same class); unmatched reference boxes are \emph{lost true positives} or
+\emph{suppressed false positives} and unmatched target boxes are \emph{new true positives} or \emph{new false positives},
+judged against ground truth. With $M$ matched boxes and $F$ flips, the flip rate is $\Phi = F / (M + F)$.
 
-\section{Methodology}
-
-\subsection{Dual-Mode Timing Protocol \& Stability Filtering}
-Inference timing on edge accelerators is highly susceptible to OS preemption, thermal throttling, and memory bus contention. We implement a dual-mode timing protocol:
-\begin{itemize}
-    \item \textbf{CUDA Hardware Events}: For GPU engines (PyTorch CUDA, ORT CUDA, TensorRT), latency is measured directly on the device stream via \texttt{cudaEventRecord} pairs, ensuring zero host synchronization stall contamination.
-    \item \textbf{Monotonic CPU Counters}: For CPU backends, timing utilizes \texttt{time.perf\_counter\_ns()} preceded by explicit L3 cache flushing (allocating and traversing a 64 MB eviction buffer) to defeat cache-resident warmup bias.
-\end{itemize}
-
-To guarantee stable reporting across multiple benchmark sessions, runs are filtered using Median Absolute Deviation (MAD)~\cite{leys2013detecting}:
-\begin{equation}
-\text{MAD} = \text{median}(|t_i - \text{median}(t)|)
-\end{equation}
-Sessions exhibiting a Coefficient of Variation ($CV = \sigma / \mu > 0.04$) trigger automatic cooldown and supplemental measurement iterations until thermal equilibrium is verified.
-
-\subsection{Quantization-Aware Post-Processing (Q-Aware NMS)}
-Static INT8 Post-Training Quantization (QDQ format) applies linear mapping to activations:
-\begin{equation}
-\hat{x} = S \cdot (q - Z), \quad q = \text{clamp}\left(\text{round}\left(\frac{x}{S}\right) + Z, -128, 127\right)
-\end{equation}
-This quantization introduces logit drift $\Delta z = z_{\text{FP32}} - z_{\text{INT8}}$, perturbing sigmoid probabilities $\sigma(z)$ and shifting class score distributions downward.
-
-For a model with precision $p \in \{\text{FP32}, \text{FP16}, \text{INT8}\}$ and runtime provider $r$, Q-Aware NMS formulates an empirical threshold optimization over a disjoint calibration dataset $\mathcal{D}_{\text{cal}}$:
-\begin{equation}
-(\tau_{\text{conf}}^*, \tau_{\text{iou}}^*) = \arg\max_{(\tau_c, \tau_i) \in \mathcal{G}} F_1(\tau_c, \tau_i \mid \mathcal{D}_{\text{cal}}, p, r)
-\end{equation}
-subject to the operational latency ceiling constraint:
-\begin{equation}
-\text{Latency}_{p, r}(\tau_c, \tau_i) \le L_{\text{budget}}
-\end{equation}
-The 2D search grid $\mathcal{G} = \{(\tau_c, \tau_i) \mid \tau_c \in [0.10, 0.60], \tau_i \in [0.30, 0.70]\}$ is evaluated at step increments of $\Delta \tau = 0.05$ ($99$ candidate pairs). To achieve sub-second calibration, raw model output tensors over $\mathcal{D}_{\text{cal}}$ are cached in memory, allowing all 99 NMS sweeps to complete in under $0.5$ seconds without redundant neural network forward passes.
-
-\subsection{Quantization Decision-Change Attribution}
-To measure discrete behavioral switches induced by quantization, we introduce the \textbf{Detection Flip Rate} $\Phi$. Let $\mathcal{B}_{\text{ref}}$ and $\mathcal{B}_{\text{target}}$ denote the sets of bounding boxes predicted by the FP32 reference model and quantized target model on dataset $\mathcal{D}$, respectively. Bounding boxes are matched using greedy Hungarian assignment under spatial criterion $\text{IoU}(b_i, b_j) \ge 0.50$ and identical class identity $c_i = c_j$.
-
-The aggregate detection flip rate $\Phi$ is defined as:
-\begin{equation}
-\Phi = \frac{|\mathcal{B}_{\text{ref}} \triangle \mathcal{B}_{\text{target}}|}{\max(|\mathcal{B}_{\text{matched}}| + |\mathcal{B}_{\text{ref}} \triangle \mathcal{B}_{\text{target}}|, 1)}
-\end{equation}
-where $\triangle$ denotes the symmetric set difference between prediction sets.
-
-We partition the total flip count into True Positive and False Positive attribution components by cross-referencing ground-truth annotations $\mathcal{G}$:
-\begin{align}
-\text{Flips}_{\text{TP}} &= |\text{Lost TPs}| + |\text{New TPs}| \\
-\text{Flips}_{\text{FP}} &= |\text{New FPs}| + |\text{Suppressed FPs}|
-\end{align}
-where $\text{Frac}_{\text{Flip\_TP}} = \text{Flips}_{\text{TP}} / \Phi_{\text{total}}$ and $\text{Frac}_{\text{Flip\_FP}} = \text{Flips}_{\text{FP}} / \Phi_{\text{total}}$, satisfying $\text{Frac}_{\text{Flip\_TP}} + \text{Frac}_{\text{Flip\_FP}} = 1.0$.
-
-\subsection{Non-Parametric Statistical Methodology}
-To eliminate parametric normality assumptions in skewed latency distributions, all reported latency percentiles ($p_{50}, p_{90}, p_{95}, p_{99}$) and quality metrics are accompanied by 95\% empirical bootstrap confidence intervals~\cite{efron1994introduction} ($B=2{,}000$ resamples with replacement):
-\begin{equation}
-\text{CI}_{95\%} = \left[ \hat{\theta}^*_{(\lfloor B \cdot \alpha/2 \rfloor)}, \; \hat{\theta}^*_{(\lceil B \cdot (1 - \alpha/2) \rceil)} \right]
-\end{equation}
-Pairwise statistical significance between execution backends is assessed via the two-sided Wilcoxon signed-rank test~\cite{wilcoxon1945individual}, applying the Holm-Bonferroni correction~\cite{holm1979simple} to control the family-wise error rate across multiple comparisons.
-
-\begin{figure*}[t]
-\centering
-\subfloat[Quality vs. Latency Pareto Frontier\label{fig:pareto}]{\includegraphics[width=0.32\textwidth]{figures/pareto_quality_vs_latency.png}}
-\hfill
-\subfloat[Relative Speedup vs. Baseline\label{fig:speedup}]{\includegraphics[width=0.32\textwidth]{figures/speedup_comparison.png}}
-\hfill
-\subfloat[Tail Latency Distribution ($p_{50}$ vs. $p_{95}$)\label{fig:tail_latency}]{\includegraphics[width=0.32\textwidth]{figures/tail_latency_p50_p95.png}}
-\caption{Cross-backend execution latency, speedup, and tail distribution analysis across YOLO Nano and ConvAutoencoder workloads (Batch Size = 1).}
-\label{fig:cross_backend}
-\end{figure*}
-
-\section{Empirical Evaluation \& Analysis}
-
-\subsection{Numerical Parity \& Execution Latency}
-Table~\ref{tab:latency} reports the complete multi-session latency distributions ($p_{50}, p_{95}$), numerical divergence ($L_\infty$ Parity against PyTorch FP32), memory footprint, and throughput across all 8 benchmarked engine and precision combinations.
+\section{Results}
+All numbers come from one benchmark session (\texttt{\res{session-id}}) on a laptop with an \res{env-gpu}
+(driver \res{env-driver}, CUDA \res{env-cuda}) and an \res{env-cpu}, running \res{env-os} with Python \res{env-python},
+PyTorch \res{env-torch} and ONNX Runtime \res{env-ort}. Of \res{n-configs} configurations, \res{n-stable} met the
+stability criterion and \res{n-gates-pass} passed both acceptance gates (Table~\ref{tab:main}).
 
 \begin{table*}[t]
-\caption{Multi-Session Latency, Parity, and Memory Footprint Audit (Batch Size = 1)}
-\label{tab:latency}
+\caption{Batch-1 results per configuration: pooled model-path latency (ms) with bootstrap 95\% CI, end-to-end p50,
+session-median CV, maximum relative output error vs PyTorch FP32 (CPU), task quality on the test split (detector:
+mAP@50; autoencoder: image AUROC) with the delta to the FP32 reference, and model size.}
+\label{tab:main}
 \centering
-\resizebox{\textwidth}{!}{%
-\begin{tabular}{lllcccccc}
-\toprule
-\textbf{Workload} & \textbf{Engine} & \textbf{Precision} & \textbf{$L_\infty$ Parity} & \textbf{Model $p_{50}$ (ms)} & \textbf{Model $p_{95}$ (ms)} & \textbf{E2E $p_{50}$ (ms)} & \textbf{FPS} & \textbf{VRAM (MB)} \\
-\midrule
-YOLO Nano & PyTorch CUDA & FP32 & $0.00 \times 10^0$ & 0.83 & 0.87 & 6.88 & 1201.2 & 28.5 \\
-YOLO Nano & PyTorch CPU & FP32 & $0.00 \times 10^0$ & 7.25 & 9.50 & 12.84 & 137.9 & -- \\
-YOLO Nano & ORT CPU & FP32 & $2.33 \times 10^{-4}$ & 3.59 & 4.34 & 7.67 & 278.2 & -- \\
-YOLO Nano & ORT CPU & INT8 (QDQ) & $3.41 \times 10^{-1}$ & 4.54 & 6.53 & 9.35 & 220.2 & -- \\
-Autoencoder & PyTorch CUDA & FP32 & $0.00 \times 10^0$ & 1.22 & 1.78 & 3.59 & 821.8 & 31.2 \\
-Autoencoder & PyTorch CPU & FP32 & $0.00 \times 10^0$ & 6.26 & 7.46 & 9.72 & 159.7 & -- \\
-Autoencoder & ORT CPU & FP32 & $1.01 \times 10^{-5}$ & 6.22 & 6.81 & 8.78 & 160.9 & -- \\
-Autoencoder & ORT CPU & INT8 (QDQ) & $5.01 \times 10^{-3}$ & 6.36 & 8.19 & 9.89 & 157.3 & -- \\
-\bottomrule
-\end{tabular}%
-}
+\resizebox{\textwidth}{!}{\input{generated/table_main.tex}}
 \end{table*}
 
-As visualized across the comprehensive benchmark panel in Fig.~\ref{fig:cross_backend}, GPU acceleration delivers an order-of-magnitude latency advantage over CPU execution (Fig.~\ref{fig:pareto}), achieving $0.83$ ms model latency ($1,201.2$ FPS) on YOLO Nano. In Fig.~\ref{fig:speedup}, we examine the speedup ratios relative to the PyTorch CPU baseline: on GPU, ONNX Runtime and PyTorch CUDA deliver up to $8.7\times$ speedup over unoptimized CPU execution. However, on CPU backends, static INT8 PTQ incurs a modest latency regression ($4.54$ ms vs. $3.59$ ms for ORT FP32) due to the quantization/dequantization (QDQ) operator overhead on lightweight convolutional architectures lacking hardware AVX-512 VNNI acceleration.
+\subsection{Models and parity}
+The trained detector reaches mAP@50 \res{det-map50} (mAP@50--95 \res{det-map5095}) on the test split and the autoencoder
+an image AUROC of \res{ae-imageauroc} (AU-PRO \res{ae-aupro}). ONNX export is exact up to floating-point reordering
+(maximum relative error $\le 10^{-6}$) and FP16 stays within $5\cdot 10^{-3}$ for both models. PyTorch's default TF32
+convolutions on the GPU produced a relative error of $1.05\cdot 10^{-4}$, failing the FP32 gate; the FP32 rows therefore
+use strict IEEE FP32 (TF32 disabled), which costs speed: the autoencoder takes \res{ae-pt-gpu-fp32-p50}\,ms in FP32 versus
+\res{ae-pt-gpu-fp16-p50}\,ms in FP16.
 
-Fig.~\ref{fig:tail_latency} contrasts the median ($p_{50}$) and tail ($p_{95}$) latencies across all configurations. GPU runtimes maintain tight tail latency ratios ($p_{95}/p_{50} \le 1.05$), demonstrating predictable execution suitable for hard real-time deadlines. Conversely, CPU runtimes exhibit pronounced tail inflation ($p_{95}/p_{50} \approx 1.44$) driven by thread preemption and OS context switching.
-
-Fig.~\ref{fig:latency_breakdown} delineates the end-to-end latency budget decomposed into Pre-Processing, Model Compute, and Post-Processing stages. For GPU execution, model compute accounts for only $12.1\%$ of total wall-clock time, while letterbox image normalization ($5.62$ ms) and CPU-bound NMS ($0.43$ ms) dominate the pipeline. This demonstrates that in high-throughput edge detection systems, host-side image pre-processing and post-processing constitute the primary operational bottleneck.
-
-\begin{figure}[htbp]
+\subsection{Latency}
+\begin{figure*}[t]
 \centering
-\includegraphics[width=0.92\linewidth]{figures/latency_breakdown_stacked.png}
-\caption{End-to-end latency breakdown across Pre-Processing, Model Compute, and Post-Processing stages (Batch Size = 1).}
-\label{fig:latency_breakdown}
+\subfloat[Speedup vs PyTorch FP32 on CPU]{\includegraphics[width=0.49\textwidth]{figures/speedup_comparison.png}}
+\hfill
+\subfloat[Quality vs model-path latency]{\includegraphics[width=0.49\textwidth]{figures/pareto_quality_vs_latency.png}}
+\caption{Model-path speedups and task quality versus latency (batch 1; 95\% CIs as error bars).}
+\label{fig:speed}
+\end{figure*}
+On the CPU, ONNX Runtime FP32 is $\res{det-ort-cpu-fp32-speedup}\times$ faster than PyTorch for the detector
+(\res{det-ort-cpu-fp32-p50} vs \res{det-pt-cpu-fp32-p50}\,ms) but $\res{ae-ort-cpu-fp32-speedup}\times$ for the
+autoencoder (\res{ae-ort-cpu-fp32-p50} vs \res{ae-pt-cpu-fp32-p50}\,ms), i.e.\ the runtime choice is model-dependent
+(Fig.~\ref{fig:speed}). FP16 graphs bring no CPU speedup ($\res{det-ort-cpu-fp16-speedupfp}\times$ and
+$\res{ae-ort-cpu-fp16-speedupfp}\times$ vs ORT FP32) because the CPU lacks native FP16 arithmetic. On the GPU the
+detector is launch-bound: FP16 (\res{det-pt-gpu-fp16-p50}\,ms) is not faster than FP32 (\res{det-pt-gpu-fp32-p50}\,ms),
+whereas the autoencoder gains $3.9\times$. The only configuration that missed the stability criterion was the detector
+on PyTorch GPU FP32 (session CV \res{det-pt-gpu-fp32-cv}).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/latency_breakdown_stacked.png}
+\caption{Measured end-to-end stage medians (decode + preprocess, inference including host--device copies, post-processing).}
+\label{fig:stages}
 \end{figure}
+End to end, model execution is a minority of the detector's latency on the GPU (Fig.~\ref{fig:stages}): decode and
+preprocessing take \res{det-pt-gpu-fp32-pre}\,ms, inference including copies \res{det-pt-gpu-fp32-inf}\,ms and NMS
+\res{det-pt-gpu-fp32-post}\,ms, for an end-to-end p50 of \res{det-pt-gpu-fp32-e2e}\,ms. NMS is expensive here because the
+detector emits many low-confidence candidates at the default threshold (precision \res{det-precision} at recall
+\res{det-recall}), which also motivates the threshold study below.
 
-\begin{figure}[htbp]
+\subsection{Static INT8}
+The INT8 calibration method was chosen on the calibration split among MinMax, Percentile and Entropy; Percentile won for
+both models. With symmetric activation quantization, ONNX Runtime's Entropy ranges reduce to the MinMax scales (the
+resulting graphs are byte-identical), because the scale is set by the larger of the two asymmetric thresholds. For the
+detector, INT8 is $\res{det-ort-cpu-int8-speedupfp}\times$ faster than ORT FP32 and the file is
+\res{det-ort-cpu-int8-sizered}\% smaller (\res{det-int8-mb} vs \res{det-fp32-mb}\,MB), but its outputs deviate strongly
+(maximum relative error \res{det-ort-cpu-int8-relerr}), failing the parity gate. Its test mAP@50 nevertheless rose to
+\res{det-ort-cpu-int8-q} (\res{det-ort-cpu-int8-qdelta}): clipping changed the ranking of the many low-confidence boxes.
+We report this as a deviation, not an improvement; it would not necessarily transfer to other data. For the autoencoder
+INT8 is \res{ae-ort-cpu-int8-sizered}\% smaller but only $\res{ae-ort-cpu-int8-speedupfp}\times$ faster, and changes
+image AUROC by \res{ae-ort-cpu-int8-qdelta}, within the 0.02 allowance.
+
+\subsection{Q-Aware NMS}
+\begin{table}[t]
+\caption{Test-split micro-$F_1$ at the default thresholds (0.25, 0.45), with the thresholds calibrated on the FP32
+reference (FP32-thr.), and with each configuration's own calibration; the precision-specific effect is own vs FP32-thr.
+(paired bootstrap CI; Wilcoxon on per-image errors, Holm-corrected).}
+\label{tab:qaware}
 \centering
-\includegraphics[width=0.92\linewidth]{figures/q_aware_pareto_recovery.png}
-\caption{Pareto frontier showing task $F_1$-score recovery under Q-Aware NMS across floating-point and quantized runtimes.}
-\label{fig:q_aware_pareto}
-\end{figure}
-
-\subsection{Q-Aware NMS Task-Level Recovery}
-Table~\ref{tab:q_aware} and Fig.~\ref{fig:q_aware_pareto} present the task-level accuracy recovery achieved by Q-Aware NMS across floating-point and quantized models. While ONNX Runtime CUDA was excluded from the core v1.0 deployment tables due to host WSL2 provider constraints, we evaluate FP16 outputs in our offline post-processing threshold calibration to confirm that Q-Aware NMS generalizes consistently across precision tiers.
-
-\begin{table}[htbp]
-\caption{Q-Aware NMS Calibration and Metric Recovery}
-\label{tab:q_aware}
-\centering
-\resizebox{\columnwidth}{!}{%
-\begin{tabular}{lcccc}
-\toprule
-\textbf{Configuration} & \textbf{Default $F_1$} & \textbf{Calibrated $F_1$} & \textbf{$\Delta F_1$} & \textbf{Optimal $(\tau_c, \tau_i)$} \\
-\midrule
-YOLO FP32 (ORT CPU) & 0.912 & 0.924 & +0.012 & (0.20, 0.45) \\
-YOLO FP16 (ORT CUDA) & 0.910 & 0.921 & +0.011 & (0.20, 0.50) \\
-YOLO INT8 (ORT CPU) & 0.884 & 0.926 & \textbf{+0.042} & (0.15, 0.55) \\
-\bottomrule
-\end{tabular}%
-}
+\resizebox{\columnwidth}{!}{\input{generated/table_qaware.tex}}
 \end{table}
-
-Under default uncalibrated thresholds $(\tau_{\text{conf}}=0.25, \tau_{\text{iou}}=0.45)$, static INT8 quantization degrades the YOLO Nano $F_1$-score from $0.912$ to $0.884$ (a $2.8\%$ drop). This drop is caused by integer rounding drift that shifts predicted class logits below the arbitrary $0.25$ cutoff. Q-Aware NMS calibrates the optimal operating threshold to $(\tau_{\text{conf}}^* = 0.15, \tau_{\text{iou}}^* = 0.55)$, recovering $F_1$ to $\mathbf{0.926}$ ($+4.2\%$ recovery, $\Delta F_1 = +0.042$). 
-
-As illustrated in Fig.~\ref{fig:q_aware_pareto}, the calibrated INT8 model not only recovers its quantization loss but establishes a new Pareto-optimal operating point that outperforms the default FP32 model in task accuracy while maintaining static integer memory footprint. The post-processing latency penalty of evaluating calibrated thresholds is strictly sub-millisecond ($0.09$ ms vs. $0.08$ ms), introducing zero perceptible deployment overhead.
-
-\begin{figure}[htbp]
+\begin{figure}[t]
 \centering
-\includegraphics[width=0.92\linewidth]{figures/decision_flip_attribution.png}
-\caption{Attribution of detection decision changes ($\Phi$) partitioned into True Positive and False Positive flips.}
-\label{fig:decision_flips}
+\includegraphics[width=\linewidth]{figures/q_aware_pareto_recovery.png}
+\caption{Detection $F_1$ at default, FP32-calibrated and per-configuration calibrated post-processing thresholds.}
+\label{fig:qaware}
+\end{figure}
+Calibrating the two post-processing thresholds on the calibration split is decisive for this detector: $F_1$ rises from
+\res{qa0-f1def} to \res{qa0-f1cal} for the FP32 reference (Table~\ref{tab:qaware}, Fig.~\ref{fig:qaware}; Holm-corrected
+$p = \res{qa0-pholm}$), with the optimum at a high confidence and a low IoU threshold. This gain is generic, however: every
+precision selects nearly the same thresholds, and for INT8 its own calibration ($\tau_c^* = \res{qa3-conf}$,
+$\tau_i^* = \res{qa3-iou}$) yields $F_1 = \res{qa3-f1cal}$ versus \res{qa3-f1tr} with the transferred FP32 thresholds,
+a difference of \res{qa3-dtr} [\res{qa3-dtrlo}, \res{qa3-dtrhi}] ($p_{\text{Holm}} = \res{qa3-ptrholm}$). On this
+workload, quantization-specific threshold calibration therefore offers no measurable benefit over calibrating once on
+FP32; the calibrated thresholds also cut NMS time from \res{qa3-postdef} to \res{qa3-postcal}\,ms per image.
+
+\subsection{Decision flips}
+\begin{table}[t]
+\caption{Detection-level flips against PyTorch FP32 (test split).}
+\label{tab:flips}
+\centering
+\resizebox{\columnwidth}{!}{\input{generated/table_flips.tex}}
+\end{table}
+Aggregate metrics hide how much quantization changes individual outputs (Table~\ref{tab:flips},
+Fig.~\ref{fig:flips}). FP16 leaves the calibrated detections unchanged, whereas INT8 changes $\Phi = \res{fl3-cal-rate}$ of
+decisions (\res{fl3-cal-flips} flips) even at calibrated thresholds, \res{fl3-cal-fpshare}\% of them false-positive
+changes; at the default thresholds $\Phi = \res{fl3-def-rate}$. A deployment that relies on individual detections
+(e.g.\ counting or alarms) should therefore validate INT8 at the decision level, not only by mAP.
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/decision_flip_attribution.png}
+\caption{Decision-flip attribution against PyTorch FP32 at default and calibrated thresholds.}
+\label{fig:flips}
 \end{figure}
 
-\begin{figure}[htbp]
+\subsection{Scalability, memory and stability}
+\begin{figure}[t]
 \centering
-\includegraphics[width=0.92\linewidth]{figures/scalability_batch_resolution.png}
-\caption{Scalability grid profiling latency scaling across Batch Sizes $\{1, 2, 4, 8\}$ and Resolutions $\{320, 416, 512, 640\}$.}
-\label{fig:scalability}
+\includegraphics[width=\linewidth]{figures/scalability_batch_resolution.png}
+\caption{Detector latency and throughput (batch / p50) across batch size and input resolution, PyTorch FP32 on the GPU.}
+\label{fig:scal}
 \end{figure}
-
-\subsection{Decision-Change Attribution}
-Fig.~\ref{fig:decision_flips} analyzes the Quantization Decision Flip Rate $\Phi$ across target precision configurations relative to the FP32 baseline. The total flip rate $\Phi$ increases systematically from FP16 ($\Phi = 0.042$) to INT8 ($\Phi = 0.187$). 
-
-Crucially, our attribution decomposition reveals that in the uncalibrated INT8 model, $68.4\%$ of total flips correspond to False Positive changes ($\text{Frac}_{\text{Flip\_FP}}$), primarily manifesting as spurious low-confidence ghost boxes induced by coordinate rounding jitter. When Q-Aware NMS is applied, the calibrated threshold suppresses $84.2\%$ of these spurious false positives, shifting the attribution profile towards true positive preservation ($\text{Frac}_{\text{Flip\_TP}} = 76.1\%$). This validates that Q-Aware NMS operates selectively on quantization-induced artifacts rather than globally relaxing acceptance criteria.
-
-\subsection{Scalability Across Batch and Spatial Dimensions}
-Fig.~\ref{fig:scalability} profiles model execution across batch dimensions $B \in \{1, 2, 4, 8\}$ and input resolutions $R \in \{320, 416, 512, 640\}$. On the left axis, latency scales quadratically with spatial dimension ($O(R^2)$), expanding from $0.21$ ms at $320 \times 320$ to $0.83$ ms at $640 \times 640$ ($B=1$). 
-
-On the right axis, batching yields significant throughput amortization: batch size $B=8$ achieves $2,840.4$ FPS at $320 \times 320$ (a $2.4\times$ throughput gain over $B=1$). For memory-constrained deployments, the $416 \times 416$ resolution at $B=4$ represents an optimal sweet-spot, retaining $96.8\%$ of $640 \times 640$ detection accuracy while cutting compute latency by $57.8\%$.
-
-\begin{figure}[htbp]
+At batch 1 the detector's GPU latency is flat across resolutions (\res{sw-320-1-p50}\,ms at 320\,px,
+\res{sw-640-1-p50}\,ms at 640\,px), confirming launch-bound execution; batching raises throughput to
+\res{sw-320-8-fps} images/s at 320\,px and \res{sw-640-8-fps} images/s at 640\,px with batch 8 (Fig.~\ref{fig:scal}).
+Peak PyTorch GPU allocations were \res{det-pt-gpu-fp32-vram}\,MB (detector) and \res{ae-pt-gpu-fp32-vram}\,MB
+(autoencoder) in FP32 (Fig.~\ref{fig:mem}). Session-to-session variation stayed within $\pm$5\% for all but one
+configuration (Fig.~\ref{fig:stab}).
+\begin{figure}[t]
 \centering
-\includegraphics[width=0.92\linewidth]{figures/memory_vs_footprint.png}
-\caption{Peak host RSS and GPU VRAM memory footprint across model architectures and precision backends.}
-\label{fig:memory}
+\includegraphics[width=\linewidth]{figures/memory_vs_footprint.png}
+\caption{Serialized model size per precision and peak PyTorch GPU allocation.}
+\label{fig:mem}
 \end{figure}
-
-\begin{figure}[htbp]
+\begin{figure}[t]
 \centering
-\includegraphics[width=0.92\linewidth]{figures/stability_variance_trends.png}
-\caption{Multi-session stability, coefficient of variation ($CV$), and MAD variance trends across 100 consecutive benchmark iterations.}
-\label{fig:stability}
+\includegraphics[width=\linewidth]{figures/stability_variance_trends.png}
+\caption{Per-session median latency normalized by the median across sessions.}
+\label{fig:stab}
 \end{figure}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{figures/tail_latency_p50_p95.png}
+\caption{Tail-to-median latency ratios of the pooled model-path measurements.}
+\label{fig:tail}
+\end{figure}
+Tail latency is largest on the GPU at batch 1 (Fig.~\ref{fig:tail}), where host scheduling jitter matters most relative to
+millisecond-scale kernels.
 
-\subsection{Resource Utilization \& Multi-Session Stability}
-Fig.~\ref{fig:memory} illustrates peak host RSS and accelerator VRAM utilization. On GPU, PyTorch FP32 allocates $28.5$ MB VRAM for YOLO Nano and $31.2$ MB for the ConvAutoencoder. ONNX Runtime CPU execution requires zero dedicated VRAM and maintains a host memory footprint below $142$ MB, demonstrating viability for micro-edge controllers lacking discrete GPUs.
-
-Fig.~\ref{fig:stability} plots variance trends across 100 consecutive timed iterations. Host CPU runtimes exhibit minor periodic spikes due to OS kernel scheduling, but maintain a robust MAD-based Coefficient of Variation below $0.038$ ($3.8\%$), satisfying our stability convergence gate ($CV \le 0.04$). GPU execution demonstrates near-zero dispersion ($CV = 0.009$), confirming absence of thermal throttling or memory leakage across extended deployment runs.
-
-\section{Threats to Validity \& Limitations}
-\textbf{Workstation GPU vs. Physical Embedded Silicon}: While the NVIDIA RTX 4050 testbed shares the Ada Lovelace Tensor Core architecture with NVIDIA Jetson Orin modules, desktop-class thermal dissipation may yield higher sustained clocks than passively-cooled industrial edge nodes.
-
-\textbf{Calibration Domain Drift}: Q-Aware NMS assumes that the disjoint calibration split $\mathcal{D}_{\text{cal}}$ is representative of test-time target distributions. In safety-critical environments subjected to severe out-of-distribution shifts (e.g., adverse weather or optical distortion), calibrated thresholds must be periodically validated via streaming OOD detection safeguards.
+\section{Threats to Validity}\label{sec:threats}
+\textbf{Synthetic data and small models.} Accuracy numbers describe a controlled synthetic task; they show whether a
+runtime or precision preserves the trained model's behavior, not how a production detector performs.
+\textbf{Host noise.} Measurements were taken on a laptop under WSL2 with other system activity; the stability verdicts
+and between-session spread are part of the result rather than something removed by outlier filtering. The bootstrap
+CIs resample iterations and therefore understate between-session drift.
+\textbf{Hardware scope.} A laptop CPU and GPU are not embedded accelerators; INT8 speedups in particular depend on the
+CPU's integer instructions and on ONNX Runtime's kernel coverage.
+\textbf{Back-end coverage.} ONNX Runtime CUDA and TensorRT were not available on the host, so GPU comparisons are
+limited to PyTorch.
 
 \section{Conclusion}
-This paper demonstrates that post-training quantization noise in edge vision models can be effectively mitigated through calibration-aware post-processing without retraining. By formulating Quantization-Aware NMS (Q-Aware NMS), we recover $+4.2\%$ $F_1$-score on static INT8 models, converting a lossy quantization artifact into a Pareto-optimal deployment configuration. Paired with our decision-change attribution metric $\Phi$ and an open-source 11-stage benchmarking suite, our methodology provides systems practitioners with a rigorous foundation for deploying high-precision, low-latency vision models to the edge.
+Treating latency, parity and task quality as one gated measurement changes several conclusions one would draw from
+latency alone: the faster CPU runtime depends on the model, static INT8 can be fast yet numerically far from FP32 while
+its aggregate metric moves in either direction, FP32 on a modern GPU is TF32 unless disabled, and pre- and
+post-processing dominate end-to-end latency. Calibrating post-processing thresholds matters far more than making them
+precision-specific: on this workload the FP32-calibrated thresholds transfer to FP16 and INT8 without measurable loss,
+although INT8 still alters a substantial share of individual detections.
+Code, configuration, data generators and the recorded session are available at
+\url{https://github.com/sengarutk/onnx-quant-benchmark}; \texttt{make pipeline} regenerates every number in this paper.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}

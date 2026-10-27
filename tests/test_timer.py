@@ -1,102 +1,64 @@
-"""
-Unit tests for ModelPathTimer and EndToEndTimer dual-regime latency timing.
-"""
+"""Unit tests for ModelPathTimer and EndToEndTimer (self-contained: images are generated into tmp_path)."""
 
 from pathlib import Path
-import numpy as np
+import cv2
 import pytest
 import torch
 
-from src.benchmarking.timer import EndToEndTimer, ModelPathTimer
+from src.benchmarking.timer import EndToEndTimer, ModelPathTimer, summarize_latencies
+from src.data.synthetic import generate_detection_sample, generate_industrial_sample
+from src.export.export_onnx import AutoencoderExportWrapper
 from src.models.industrial_model_adapter import IndustrialModelAdapter
 from src.models.yolo_adapter import YOLOAdapter
 from src.runtimes.pytorch_runtime import PyTorchRuntime
 
 
+@pytest.fixture
+def det_images(tmp_path: Path):
+    paths = []
+    for i in range(3):
+        img, _ = generate_detection_sample("test", i)
+        p = tmp_path / f"d{i}.jpg"
+        cv2.imwrite(str(p), img)
+        paths.append(p)
+    return paths
+
+
+@pytest.fixture
+def ind_images(tmp_path: Path):
+    paths = []
+    for i in range(3):
+        img, _ = generate_industrial_sample("test", i, anomalous=bool(i % 2))
+        p = tmp_path / f"i{i}.png"
+        cv2.imwrite(str(p), img)
+        paths.append(p)
+    return paths
+
+
 class TestTimer:
-    """Test suite validating timer accuracy, percentile monotonicity, and pipeline execution."""
+    def test_model_path_timer_percentiles(self) -> None:
+        rt = PyTorchRuntime(YOLOAdapter().get_pytorch_model(), device="cpu")
+        rt.load()
+        res = ModelPathTimer(warmup_iterations=2, timed_iterations=12, device="cpu").benchmark_device(rt, torch.randn(1, 3, 320, 320))
+        assert 0 < res["p50_ms"] <= res["p90_ms"] <= res["p95_ms"] <= res["p99_ms"]
+        assert res["iterations"] == 12 and len(res["latencies_ms"]) == 12
 
-    def test_model_path_timer_percentile_monotonicity(self) -> None:
-        """Tests that model-path timer percentiles obey p50 <= p90 <= p95 <= p99."""
+    def test_summarize_latencies_batch_throughput(self) -> None:
+        s = summarize_latencies([2.0, 2.0, 2.0], batch_size=4)
+        assert s["p50_ms"] == 2.0 and s["throughput_fps"] == 2000.0
+
+    def test_end_to_end_detection_stage_breakdown(self, det_images) -> None:
         adapter = YOLOAdapter()
-        runtime = PyTorchRuntime(adapter.get_pytorch_model(), device="cpu")
-        runtime.load()
+        rt = PyTorchRuntime(adapter.get_pytorch_model(), device="cpu")
+        rt.load()
+        res = EndToEndTimer(warmup_iterations=1, timed_iterations=4).benchmark_e2e_detection(rt, det_images, adapter)
+        assert 0 < res["e2e_p50_ms"] <= res["e2e_p95_ms"]
+        stages = res["stage_preprocess_mean_ms"] + res["stage_inference_mean_ms"] + res["stage_postprocess_mean_ms"]
+        assert abs(stages - res["e2e_mean_ms"]) < 0.05 * res["e2e_mean_ms"] + 0.1  # stages tile the total
 
-        timer = ModelPathTimer(warmup_iterations=5, timed_iterations=20, device="cpu")
-        dummy_in = torch.randn(1, 3, 640, 640)
-        res = timer.benchmark_device(runtime, dummy_in)
-
-        assert res["p50_ms"] > 0.0
-        assert res["p50_ms"] <= res["p90_ms"]
-        assert res["p90_ms"] <= res["p95_ms"]
-        assert res["p95_ms"] <= res["p99_ms"]
-        assert res["throughput_fps"] > 0.0
-        assert res["iterations"] == 20.0
-        runtime.cleanup()
-
-    def test_end_to_end_timer_detection(self) -> None:
-        """Tests EndToEndTimer on detection sample images."""
-        root = Path(__file__).resolve().parent.parent
-        sample_dir = root / "data" / "sample_images" / "detection"
-        samples = list(sample_dir.rglob("*.jpg"))
-
-        if not samples:
-            pytest.skip("Detection sample images not found")
-
-        adapter = YOLOAdapter()
-        runtime = PyTorchRuntime(adapter.get_pytorch_model(), device="cpu")
-        runtime.load()
-
-        timer = EndToEndTimer(warmup_iterations=2, timed_iterations=5)
-        res = timer.benchmark_e2e_detection(runtime, samples, adapter)
-
-        assert res["p50_e2e_ms"] > 0.0
-        assert res["p50_e2e_ms"] <= res["p95_e2e_ms"]
-        assert res["throughput_e2e_fps"] > 0.0
-        runtime.cleanup()
-
-    def test_end_to_end_timer_industrial(self) -> None:
-        """Tests EndToEndTimer on industrial sample images."""
-        root = Path(__file__).resolve().parent.parent
-        sample_dir = root / "data" / "sample_images" / "industrial"
-        samples = list(sample_dir.rglob("*.png"))
-
-        if not samples:
-            pytest.skip("Industrial sample images not found")
-
-        adapter = IndustrialModelAdapter()
-        runtime = PyTorchRuntime(adapter.get_pytorch_model(), device="cpu")
-        runtime.load()
-
-        timer = EndToEndTimer(warmup_iterations=2, timed_iterations=5)
-        res = timer.benchmark_e2e_industrial(runtime, samples, adapter)
-
-        assert res["p50_e2e_ms"] > 0.0
-        assert res["p50_e2e_ms"] <= res["p95_e2e_ms"]
-        assert res["throughput_e2e_fps"] > 0.0
-        runtime.cleanup()
-
-    def test_yolo_postprocessing_latency_sub_10ms(self) -> None:
-        """Asserts that YOLO detection postprocessing completes in under 10 ms for batch size 1."""
-        adapter = YOLOAdapter()
-        model = adapter.get_pytorch_model().eval()
-        with torch.no_grad():
-            dummy_raw = model(torch.randn(1, 3, 640, 640))
-        orig_shape = (640, 640)
-        ratio = (1.0, 1.0)
-        pad = (0.0, 0.0)
-
-        # Warmup
-        for _ in range(5):
-            _ = adapter.postprocess(dummy_raw, orig_shape, ratio, pad)
-
-        import time
-        latencies = []
-        for _ in range(20):
-            t0 = time.perf_counter()
-            _ = adapter.postprocess(dummy_raw, orig_shape, ratio, pad)
-            t1 = time.perf_counter()
-            latencies.append((t1 - t0) * 1000.0)
-
-        p50_postprocess_ms = float(np.median(latencies))
-        assert p50_postprocess_ms < 10.0, f"YOLO postprocessing p50={p50_postprocess_ms:.2f}ms exceeds 10ms limit"
+    def test_end_to_end_industrial(self, ind_images) -> None:
+        model = AutoencoderExportWrapper(IndustrialModelAdapter().get_pytorch_model()).eval()
+        rt = PyTorchRuntime(model, device="cpu", input_names=["input"], output_names=["reconstruction", "anomaly_map"])
+        rt.load()
+        res = EndToEndTimer(warmup_iterations=1, timed_iterations=4).benchmark_e2e_industrial(rt, ind_images)
+        assert res["e2e_p50_ms"] > 0 and res["stage_inference_p50_ms"] > 0

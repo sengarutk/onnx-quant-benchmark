@@ -1,0 +1,18 @@
+\begin{tabular}{lllrrrrrrr}
+\toprule
+\textbf{Model} & \textbf{Runtime} & \textbf{Prec.} & \textbf{p50 [95\% CI] (ms)} & \textbf{p95} & \textbf{E2E p50} & \textbf{CV} & \textbf{Rel. err.} & \textbf{Quality ($\Delta$)} & \textbf{MB} \\
+\midrule
+Detector & PyTorch CPU & FP32 & 13.98 [13.95, 14.05] & 18.09 & 20.60 & 0.011 & 0.0e+00 & 0.701 (+0.000) & 7.43 \\
+Detector & PyTorch GPU & FP32 & 1.61 [1.60, 1.62] & 3.59 & 10.21 & 0.051 & 4.2e-07 & 0.701 (+0.000) & 7.43 \\
+Detector & PyTorch GPU & FP16 & 1.89 [1.88, 1.89] & 4.57 & 10.15 & 0.013 & 2.1e-03 & 0.705 (+0.004) & 3.72 \\
+Detector & ORT CPU & FP32 & 8.98 [8.94, 9.01] & 11.85 & 17.67 & 0.016 & 5.5e-07 & 0.701 (+0.000) & 7.50 \\
+Detector & ORT CPU & FP16 & 9.08 [9.05, 9.11] & 12.33 & 18.05 & 0.015 & 5.9e-04 & 0.701 (+0.000) & 3.76 \\
+Detector & ORT CPU & INT8 & 5.88 [5.85, 5.91] & 7.00 & 14.62 & 0.008 & 2.0e-01 & 0.777 (+0.076) & 1.98 \\
+Autoencoder & PyTorch CPU & FP32 & 5.68 [5.65, 5.71] & 7.29 & 8.09 & 0.023 & 0.0e+00 & 0.931 (+0.000) & 5.41 \\
+Autoencoder & PyTorch GPU & FP32 & 3.90 [3.90, 3.90] & 4.14 & 6.50 & 0.002 & 1.6e-06 & 0.931 (+0.000) & 5.41 \\
+Autoencoder & PyTorch GPU & FP16 & 1.01 [1.01, 1.02] & 1.45 & 3.39 & 0.020 & 3.7e-03 & 0.931 (+0.000) & 2.70 \\
+Autoencoder & ORT CPU & FP32 & 6.13 [6.11, 6.16] & 7.83 & 7.90 & 0.008 & 1.2e-06 & 0.931 (+0.000) & 5.40 \\
+Autoencoder & ORT CPU & FP16 & 8.92 [8.90, 8.95] & 10.46 & 11.18 & 0.006 & 1.9e-03 & 0.931 (+0.000) & 2.70 \\
+Autoencoder & ORT CPU & INT8 & 5.88 [5.83, 5.92] & 7.37 & 7.66 & 0.029 & 8.3e-02 & 0.914 (-0.016) & 1.39 \\
+\bottomrule
+\end{tabular}

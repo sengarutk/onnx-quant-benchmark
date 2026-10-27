@@ -1,0 +1,139 @@
+{
+  "settings": {
+    "format": "QDQ",
+    "calibrate_method": "selected per model on the calibration split from CALIBRATION_METHODS",
+    "per_channel": true,
+    "weight_type": "QInt8",
+    "activation_type": "QUInt8",
+    "symmetric_weights": true,
+    "symmetric_activations": true,
+    "op_types": [
+      "Conv",
+      "ConvTranspose",
+      "MatMul",
+      "Gemm"
+    ]
+  },
+  "models": {
+    "yolo_nano": {
+      "calibration_images": 100,
+      "fp32_size_mb": 7.5,
+      "int8_calibration_method": "Percentile",
+      "int8_method_ablation": {
+        "MinMax": {
+          "file": "yolo_nano_int8_minmax.onnx",
+          "calibration_split_score": 0.459,
+          "test_metric": 0.4181,
+          "test_delta": -0.2829999999999999,
+          "test_status": "REJECTED"
+        },
+        "Percentile": {
+          "file": "yolo_nano_int8_percentile.onnx",
+          "calibration_split_score": 0.7547,
+          "test_metric": 0.7774,
+          "test_delta": 0.07630000000000003,
+          "test_status": "PASS"
+        },
+        "Entropy": {
+          "file": "yolo_nano_int8_entropy.onnx",
+          "calibration_split_score": 0.459,
+          "test_metric": 0.4181,
+          "test_delta": -0.2829999999999999,
+          "test_status": "REJECTED"
+        }
+      },
+      "fp16": {
+        "file": "yolo_nano_fp16.onnx",
+        "size_mb": 3.76,
+        "status": "PASS",
+        "metric": "mAP_50",
+        "value": 0.7008,
+        "baseline": 0.7011,
+        "delta": -0.00029999999999996696,
+        "max_allowed_drop": 0.005,
+        "metrics": {
+          "mAP_50": 0.7008,
+          "mAP_50_95": 0.5006,
+          "precision": 0.0463,
+          "recall": 0.9605,
+          "f1": 0.0883
+        }
+      },
+      "int8": {
+        "file": "yolo_nano_static_int8.onnx",
+        "size_mb": 1.982,
+        "status": "PASS",
+        "metric": "mAP_50",
+        "value": 0.7774,
+        "baseline": 0.7011,
+        "delta": 0.07630000000000003,
+        "max_allowed_drop": 0.02,
+        "metrics": {
+          "mAP_50": 0.7774,
+          "mAP_50_95": 0.5475,
+          "precision": 0.0444,
+          "recall": 0.9737,
+          "f1": 0.0849
+        }
+      }
+    },
+    "industrial_autoencoder": {
+      "calibration_images": 100,
+      "fp32_size_mb": 5.397,
+      "int8_calibration_method": "Percentile",
+      "int8_method_ablation": {
+        "MinMax": {
+          "file": "industrial_autoencoder_int8_minmax.onnx",
+          "calibration_split_score": -0.1768817614763975,
+          "test_metric": 0.9307,
+          "test_delta": -0.00019999999999997797,
+          "test_status": "PASS"
+        },
+        "Percentile": {
+          "file": "industrial_autoencoder_int8_percentile.onnx",
+          "calibration_split_score": -0.15915629848837853,
+          "test_metric": 0.9145,
+          "test_delta": -0.01639999999999997,
+          "test_status": "PASS"
+        },
+        "Entropy": {
+          "file": "industrial_autoencoder_int8_entropy.onnx",
+          "calibration_split_score": -0.1768817614763975,
+          "test_metric": 0.9307,
+          "test_delta": -0.00019999999999997797,
+          "test_status": "PASS"
+        }
+      },
+      "fp16": {
+        "file": "industrial_autoencoder_fp16.onnx",
+        "size_mb": 2.702,
+        "status": "PASS",
+        "metric": "image_auroc",
+        "value": 0.9306,
+        "baseline": 0.9309,
+        "delta": -0.00029999999999996696,
+        "max_allowed_drop": 0.005,
+        "metrics": {
+          "image_auroc": 0.9306,
+          "pixel_auroc": 0.6192,
+          "aupro": 0.801
+        }
+      },
+      "int8": {
+        "file": "industrial_autoencoder_static_int8.onnx",
+        "size_mb": 1.389,
+        "status": "PASS",
+        "metric": "image_auroc",
+        "value": 0.9145,
+        "baseline": 0.9309,
+        "delta": -0.01639999999999997,
+        "max_allowed_drop": 0.02,
+        "metrics": {
+          "image_auroc": 0.9145,
+          "pixel_auroc": 0.6195,
+          "aupro": 0.7993
+        }
+      }
+    }
+  }
+}

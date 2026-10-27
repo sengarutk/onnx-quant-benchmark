@@ -15,7 +15,8 @@ def compute_tensor_diff(tensor_a: np.ndarray, tensor_b: np.ndarray) -> Dict[str,
         tensor_b: Candidate test NumPy tensor (e.g. ONNX FP16 / TensorRT INT8).
 
     Returns:
-        Dict containing max_abs_error, mean_abs_error, rmse, cosine_similarity, and anomaly counts.
+        Dict containing max_abs_error, mean_abs_error, max_rel_error (max abs error / max |reference|), rmse,
+        cosine_similarity, and NaN/Inf counts.
     """
     a = np.asarray(tensor_a, dtype=np.float64)
     b = np.asarray(tensor_b, dtype=np.float64)
@@ -39,13 +40,39 @@ def compute_tensor_diff(tensor_a: np.ndarray, tensor_b: np.ndarray) -> Dict[str,
     else:
         cosine_sim = 1.0 if max_err < 1e-6 else 0.0
 
+    ref_scale = float(np.max(np.abs(a))) if a.size else 0.0
+    rel_err = float(max_err / ref_scale) if ref_scale > 1e-12 else float(max_err)
+
     return {
         "max_abs_error": float(max_err),
         "mean_abs_error": float(mean_err),
+        "max_rel_error": rel_err,
         "rmse": float(rmse),
         "cosine_similarity": float(cosine_sim),
         "nan_count": nan_count,
         "inf_count": inf_count,
+    }
+
+
+def compare_output_sets(reference: List[np.ndarray], candidate: List[np.ndarray], names: List[str]) -> Dict[str, Any]:
+    """
+    Compares every output tensor of a candidate runtime with the reference.
+
+    Returns:
+        {"per_output": {name: diff}, plus worst-case max_abs_error / mean_abs_error / max_rel_error and the
+        minimum cosine_similarity across outputs}.
+    """
+    if len(reference) != len(candidate):
+        raise ValueError(f"Output count mismatch: {len(reference)} vs {len(candidate)}")
+    per = {n: compute_tensor_diff(r, c) for n, r, c in zip(names, reference, candidate)}
+    return {
+        "per_output": per,
+        "max_abs_error": max(d["max_abs_error"] for d in per.values()),
+        "mean_abs_error": max(d["mean_abs_error"] for d in per.values()),
+        "max_rel_error": max(d["max_rel_error"] for d in per.values()),
+        "cosine_similarity": min(d["cosine_similarity"] for d in per.values()),
+        "nan_count": sum(d["nan_count"] for d in per.values()),
+        "inf_count": sum(d["inf_count"] for d in per.values()),
     }
 
 

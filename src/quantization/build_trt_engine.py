@@ -56,9 +56,21 @@ def build_tensorrt_engine(
     out_p.parent.mkdir(parents=True, exist_ok=True)
     logger.info(f"Building TensorRT engine: {in_p.name} -> {out_p.name} (Precision: {precision})...")
 
+    if precision.lower() == "int8":
+        import onnx
+        ops = {n.op_type for n in onnx.load(str(in_p), load_external_data=False).graph.node}
+        if "QuantizeLinear" not in ops:
+            raise ValueError(
+                "INT8 engines are built from explicitly quantized (QDQ) ONNX graphs; "
+                f"{in_p.name} contains no QuantizeLinear nodes. Pass the static INT8 QDQ model instead."
+            )
+
     trt_logger = trt.Logger(trt.Logger.INFO)
     builder = trt.Builder(trt_logger)
-    network_flags = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
+    # EXPLICIT_BATCH is mandatory in TensorRT 8.x and the default (flag deprecated) in TensorRT 10.x.
+    network_flags = 0
+    if int(str(getattr(trt, "__version__", "10")).split(".")[0]) < 10:
+        network_flags = 1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
     network = builder.create_network(network_flags)
     parser = trt.OnnxParser(network, trt_logger)
 

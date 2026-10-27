@@ -54,12 +54,43 @@ def _get_git_commit() -> str:
         return "UNKNOWN"
 
 
+def _get_cpu_model() -> str:
+    """Reads the CPU marketing name (Linux /proc/cpuinfo, falling back to platform)."""
+    try:
+        for line in Path("/proc/cpuinfo").read_text(encoding="utf-8").splitlines():
+            if line.lower().startswith("model name"):
+                return line.split(":", 1)[1].strip()
+    except Exception:
+        pass
+    return platform.processor() or platform.machine()
+
+
+def _get_os_distro() -> str:
+    """Returns the Linux distribution PRETTY_NAME (e.g. 'Ubuntu 24.04.4 LTS') when available."""
+    try:
+        for line in Path("/etc/os-release").read_text(encoding="utf-8").splitlines():
+            if line.startswith("PRETTY_NAME="):
+                return line.split("=", 1)[1].strip().strip('"')
+    except Exception:
+        pass
+    return platform.system()
+
+
+def _format_cudnn(version: Optional[int]) -> Optional[str]:
+    """Formats torch.backends.cudnn.version() integers (e.g. 90100 -> '9.1.0')."""
+    if not version:
+        return None
+    v = int(version)
+    if v >= 10000:  # cuDNN >= 9: major*10000 + minor*100 + patch
+        return f"{v // 10000}.{(v % 10000) // 100}.{v % 100}"
+    return f"{v // 1000}.{(v % 1000) // 100}.{v % 100}"
+
+
 def _get_cpu_info() -> str:
-    """Extracts human-readable CPU model and topology."""
+    """Extracts human-readable CPU model and the topology exposed to this OS (may be virtualized, e.g. WSL2)."""
     cores_phys = psutil.cpu_count(logical=False) or 1
     cores_log = psutil.cpu_count(logical=True) or 1
-    processor = platform.processor() or platform.machine()
-    return f"{processor} ({cores_phys} physical cores, {cores_log} logical threads)"
+    return f"{_get_cpu_model()} ({cores_phys} cores / {cores_log} threads visible to the OS)"
 
 
 def get_physical_core_count() -> int:
@@ -147,8 +178,8 @@ def collect_environment_manifest() -> EnvironmentManifest:
     """
     ts = datetime.now(timezone.utc).isoformat()
     git_hash = _get_git_commit()
-    py_ver = sys.version.replace("\n", " ")
-    os_str = f"{platform.system()} {platform.release()} ({platform.machine()})"
+    py_ver = sys.version.replace("\n", " ").replace(" | ", ", ")
+    os_str = f"{_get_os_distro()}, {platform.system()} {platform.release()} ({platform.machine()})"
     cpu_str = _get_cpu_info()
     ram_gb = round(psutil.virtual_memory().total / (1024.0 ** 3), 2)
 
@@ -173,7 +204,7 @@ def collect_environment_manifest() -> EnvironmentManifest:
         gpu_avail = torch.cuda.is_available()
         cuda_ver = torch.version.cuda
         if hasattr(torch.backends, "cudnn") and torch.backends.cudnn.is_available():
-            cudnn_ver = str(torch.backends.cudnn.version())
+            cudnn_ver = _format_cudnn(torch.backends.cudnn.version())
 
         if gpu_avail:
             gpu_model = torch.cuda.get_device_name(0)
@@ -218,11 +249,11 @@ def collect_environment_manifest() -> EnvironmentManifest:
     except Exception:
         onnx_ver = "NOT_INSTALLED"
 
-    # ONNX Runtime inspection
+    # ONNX Runtime inspection (version + the execution providers actually available in this build)
     try:
         import onnxruntime
 
-        ort_ver = str(onnxruntime.__version__)
+        ort_ver = f"{onnxruntime.__version__} (providers: {', '.join(onnxruntime.get_available_providers())})"
     except Exception:
         ort_ver = "NOT_INSTALLED"
 

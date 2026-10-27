@@ -40,6 +40,7 @@ class TestTensorRTRuntime:
             build_tensorrt_engine(tmp_path / "dummy.onnx", tmp_path / "out.engine")
         assert "TensorRT is not available" in str(excinfo.value)
 
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA streams required")
     def test_tensorrt_runtime_mocked_execution(self, tmp_path: Path) -> None:
         """Tests TensorRTRuntime initialization and predict dispatch with mocked TensorRT API."""
         dummy_engine = tmp_path / "mock.engine"
@@ -110,3 +111,12 @@ class TestTensorRTRuntime:
             )
             assert res.is_file()
             assert engine_out.read_bytes() == b"MOCK_SERIALIZED_PLAN"
+
+    def test_int8_build_requires_qdq_graph(self, tmp_path: Path) -> None:
+        """INT8 engines must come from an explicitly quantized (QDQ) ONNX graph."""
+        from src.export.export_onnx import export_to_onnx
+        onnx_p = tmp_path / "fp32.onnx"
+        export_to_onnx(torch.nn.Conv2d(3, 4, 3), torch.randn(1, 3, 8, 8), onnx_p, ["x"], ["y"])
+        with patch.object(trt_builder_mod, "TRT_AVAILABLE", True), patch.object(trt_builder_mod, "trt", MagicMock()):
+            with pytest.raises(ValueError, match="QDQ"):
+                build_tensorrt_engine(onnx_p, tmp_path / "e.engine", precision="int8")

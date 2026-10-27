@@ -1,15 +1,12 @@
 """
 Execution Provider & Fallback Auditor trapping silent CPU fallback during GPU execution.
+
+Scope: session-level provider registration only. ONNX Runtime may still assign individual unsupported nodes to
+the CPU provider inside a GPU session; per-node placement can be inspected with ORT verbose logging/profiling.
 """
 
-import sys
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict
 import onnxruntime as ort
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.common.logging import setup_logger
 from src.runtimes.base import BaseRuntime
@@ -18,9 +15,7 @@ logger = setup_logger("fallback_audit")
 
 
 class FallbackAuditor:
-    """
-    Audits and validates active execution provider placement.
-    """
+    """Audits and validates active execution provider placement."""
 
     @staticmethod
     def audit_ort_session(session: ort.InferenceSession, requested_provider: str) -> Dict[str, Any]:
@@ -35,7 +30,7 @@ class FallbackAuditor:
             Dictionary with audit results.
 
         Raises:
-            RuntimeError: If requested GPU provider silently fell back to CPU.
+            RuntimeError: If the requested provider is not registered in the session.
         """
         active_providers = session.get_providers()
         logger.info(f"Auditing session providers (Requested: {requested_provider}, Active: {active_providers})")
@@ -63,10 +58,25 @@ class FallbackAuditor:
 
     @staticmethod
     def assert_zero_fallback(runtime: BaseRuntime) -> None:
-        """Asserts that a runtime is executing on its claimed hardware provider."""
-        provider = runtime.get_active_provider()
-        if "CUDA" in provider and not (sys.platform == "linux" or sys.platform == "win32"):
-            raise RuntimeError(f"GPU runtime cannot run on platform: {sys.platform}")
+        """
+        Asserts that a runtime executes on the provider it claims.
+
+        * ORT runtimes: the claimed provider must be the primary provider of the live session.
+        * PyTorch CUDA: the model parameters must reside on a CUDA device.
+        """
+        claimed = runtime.get_active_provider()
+        session = getattr(runtime, "session", None)
+        if session is not None:
+            FallbackAuditor.audit_ort_session(session, claimed)
+            primary = session.get_providers()[0]
+            if primary != claimed:
+                raise RuntimeError(f"Runtime claims '{claimed}' but session primary provider is '{primary}'")
+            return
+        model = getattr(runtime, "model", None)
+        if model is not None and "CUDA" in claimed.upper():
+            devices = {p.device.type for p in model.parameters()}
+            if devices != {"cuda"}:
+                raise RuntimeError(f"Runtime claims '{claimed}' but parameters reside on {sorted(devices)}")
 
 
 def audit_ort_session(session: ort.InferenceSession, requested_provider: str) -> Dict[str, Any]:

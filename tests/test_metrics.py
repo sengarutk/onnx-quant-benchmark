@@ -90,3 +90,35 @@ class TestMetrics:
         assert res["matched_boxes"] == 1
         assert res["class_match_rate"] == 1.0
         assert res["mean_box_mae"] > 0.0
+
+    def test_compute_ap_no_true_positives_is_zero(self) -> None:
+        """Regression: a detector without true positives must score AP = 0 (not 1/101)."""
+        assert compute_ap(np.zeros(5), np.zeros(5)) == 0.0
+        assert compute_ap(np.array([]), np.array([])) == 0.0
+
+    def test_compute_ap_partial_recall(self) -> None:
+        """Recall thresholds beyond the achieved recall contribute zero precision."""
+        ap = compute_ap(np.array([0.5]), np.array([1.0]))
+        assert np.isclose(ap, 51 / 101)
+
+    def test_evaluate_detection_precision_recall_fields(self) -> None:
+        """mean_precision / mean_recall reflect the prediction set, not a copy of mAP."""
+        preds = [[{"bbox": [10, 10, 50, 50], "score": 0.9, "class_id": 0},
+                  {"bbox": [200, 200, 250, 250], "score": 0.8, "class_id": 0}]]
+        gts = [[{"bbox": [10, 10, 50, 50], "class_id": 0}, {"bbox": [400, 400, 450, 450], "class_id": 0}]]
+        m = evaluate_detection_dataset(preds, gts)
+        assert m["mean_precision"] == 0.5
+        assert m["mean_recall"] == 0.5
+        assert np.isclose(m["mAP_50"], round(51 / 101 * 1.0, 4), atol=1e-4)
+
+    def test_degenerate_anomaly_metrics_are_nan(self) -> None:
+        """Single-class inputs make AUROC / AU-PRO undefined: NaN instead of a fabricated perfect score."""
+        assert np.isnan(compute_image_auroc([0, 0, 0], [0.1, 0.2, 0.3]))
+        empty = [np.zeros((8, 8), dtype=np.float32)]
+        assert np.isnan(compute_pixel_auroc(empty, empty))
+        assert np.isnan(compute_aupro(empty, empty))
+
+    def test_compute_tensor_diff_relative_error(self) -> None:
+        a = np.array([0.0, 10.0], dtype=np.float32)
+        b = np.array([0.0, 10.5], dtype=np.float32)
+        assert np.isclose(compute_tensor_diff(a, b)["max_rel_error"], 0.05)

@@ -1,12 +1,19 @@
 """
-Scalability Profiling Sweep across Batch Sizes (1, 2, 4, 8) and Input Resolutions (320, 416, 512, 640).
-Measures latency scaling, throughput (FPS), and memory footprint.
+Scalability sweep: batch size {1, 2, 4, 8} x input resolution {320, 416, 512, 640} for the trained detector
+in PyTorch FP32 (CUDA when available, otherwise CPU).
+
+Each grid point is measured in ``repeats`` independent sessions; the reported latency percentiles are pooled over
+all sessions and throughput is batch / p50. Output: results/scalability_sweep.csv and
+results/figures/scalability_batch_resolution.png.
 """
 
-from pathlib import Path
-import csv
+import argparse
 import sys
-import time
+from pathlib import Path
+from typing import List, Optional
+import matplotlib
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -17,112 +24,103 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.benchmarking.memory import MemoryProfiler
-from src.benchmarking.throughput import compute_throughput
 from src.benchmarking.timer import ModelPathTimer
 from src.common.logging import setup_logger
 from src.common.seed import seed_everything
-from src.models.yolo_adapter import YOLONanoDetector
+from src.models.yolo_adapter import YOLOAdapter
 from src.runtimes.pytorch_runtime import PyTorchRuntime
 
 logger = setup_logger("run_scalability_sweep")
 
 
 def run_scalability_sweeps(
-    resolutions: list = [320, 416, 512, 640],
-    batch_sizes: list = [1, 2, 4, 8],
-    warmup_iters: int = 15,
-    timed_iters: int = 40,
-    out_csv: Path = None,
-    fig_dir: Path = None,
+    resolutions: Optional[List[int]] = None,
+    batch_sizes: Optional[List[int]] = None,
+    warmup_iters: int = 30,
+    timed_iters: int = 200,
+    repeats: int = 3,
+    out_csv: Optional[Path] = None,
+    fig_dir: Optional[Path] = None,
     save_artifacts: bool = True,
+    device: Optional[str] = None,
 ) -> pd.DataFrame:
-    """
-    Executes 2D scalability grid sweep over resolutions and batch dimensions.
-    """
+    resolutions = resolutions or [320, 416, 512, 640]
+    batch_sizes = batch_sizes or [1, 2, 4, 8]
     seed_everything(42)
-    logger.info(f"Starting scalability sweep: Resolutions={resolutions}, Batch Sizes={batch_sizes}...")
-
-    device_str = "cuda" if torch.cuda.is_available() else "cpu"
-    device = torch.device(device_str)
-
-    model = YOLONanoDetector(num_classes=80).to(device)
-    model.eval()
-    runtime = PyTorchRuntime(model, device=device_str, precision="fp32")
+    device = device or ("cuda:0" if torch.cuda.is_available() else "cpu")
+    adapter = YOLOAdapter()
+    runtime = PyTorchRuntime(adapter.get_pytorch_model(), device=device, precision="fp32")
+    runtime.load()
     profiler = MemoryProfiler()
-    timer = ModelPathTimer(warmup_iterations=warmup_iters, timed_iterations=timed_iters)
+    timer = ModelPathTimer(warmup_iterations=warmup_iters, timed_iterations=timed_iters, device=device)
+    dev_name = torch.cuda.get_device_name(0) if device.startswith("cuda") else "CPU"
+    logger.info(f"Scalability sweep on {dev_name} (trained weights: {adapter.weights_loaded})")
 
     records = []
-
     for res in resolutions:
         for bs in batch_sizes:
-            logger.info(f"Profiling Batch Size={bs}, Resolution={res}x{res} on {device_str.upper()}...")
-            dummy_in = torch.randn(bs, 3, res, res, dtype=torch.float32, device=device)
-
-            profiler.start_tracking(is_cuda=(device_str == "cuda"))
-            timing_stats = timer.benchmark_device(runtime, dummy_in)
-            mem_stats = profiler.stop_tracking()
-
-            p50 = timing_stats["p50_ms"]
-            p90 = timing_stats["p90_ms"]
-            p95 = timing_stats["p95_ms"]
-            fps = compute_throughput(p50, batch_size=bs)
-
+            x = torch.randn(bs, 3, res, res, device=device)
+            profiler.start_tracking(is_cuda=device.startswith("cuda"))
+            sessions = [timer.benchmark_device(runtime, x) for _ in range(repeats)]
+            mem = profiler.stop_tracking()
+            pooled = np.concatenate([s["latencies_ms"] for s in sessions])
+            p50 = float(np.percentile(pooled, 50))
+            session_p50 = [s["p50_ms"] for s in sessions]
             records.append({
+                "device": dev_name,
                 "resolution": res,
                 "batch_size": bs,
                 "input_dim": f"{bs}x3x{res}x{res}",
-                "p50_ms": round(p50, 3),
-                "p90_ms": round(p90, 3),
-                "p95_ms": round(p95, 3),
-                "throughput_fps": round(fps, 1),
-                "peak_vram_mb": mem_stats["peak_vram_allocated_mb"],
-                "process_rss_mb": mem_stats["process_rss_mb"],
+                "p50_ms": round(p50, 4),
+                "p90_ms": round(float(np.percentile(pooled, 90)), 4),
+                "p95_ms": round(float(np.percentile(pooled, 95)), 4),
+                "p50_per_image_ms": round(p50 / bs, 4),
+                "throughput_fps": round(bs * 1000.0 / p50, 1),
+                "session_cv": round(float(np.std(session_p50) / np.mean(session_p50)), 4),
+                "peak_vram_mb": mem["peak_vram_allocated_mb"],
+                "samples": int(pooled.size),
             })
+            logger.info(f"bs={bs} res={res}: p50 {p50:.3f} ms, {records[-1]['throughput_fps']} FPS")
 
     df = pd.DataFrame(records)
     if save_artifacts:
         csv_dest = Path(out_csv) if out_csv else PROJECT_ROOT / "results" / "scalability_sweep.csv"
         csv_dest.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(csv_dest, index=False)
-        logger.info(f"Saved scalability sweep CSV -> {csv_dest}")
 
-        # Render Publication Figure: Scalability Batch & Resolution Sweep
         target_fig_dir = Path(fig_dir) if fig_dir else PROJECT_ROOT / "results" / "figures"
         target_fig_dir.mkdir(parents=True, exist_ok=True)
-
-        plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.0, 5.0), dpi=300)
-
-        # Subplot 1: Latency (p50) vs Resolution per Batch Size
         for bs in batch_sizes:
-            sub_df = df[df["batch_size"] == bs]
-            ax1.plot(sub_df["resolution"], sub_df["p50_ms"], marker="o", lw=2.0, label=f"Batch Size = {bs}")
-
-        ax1.set_title(r"Inference Latency ($p_{50}$) Scaling vs. Resolution", fontsize=11, fontweight="bold")
-        ax1.set_xlabel("Input Resolution (Square Pixels)", fontsize=10, fontweight="bold")
-        ax1.set_ylabel(r"Model Latency $p_{50}$ (ms)", fontsize=10, fontweight="bold")
+            sub = df[df["batch_size"] == bs]
+            ax1.plot(sub["resolution"], sub["p50_ms"], marker="o", lw=2.0, label=f"Batch {bs}")
+        ax1.set_title("Batch latency p50 vs. input resolution", fontweight="bold")
+        ax1.set_xlabel("Input resolution (square, px)")
+        ax1.set_ylabel("Model-path latency p50 per batch (ms)")
         ax1.set_xticks(resolutions)
-        ax1.legend(frameon=True, fontsize=9)
-
-        # Subplot 2: Throughput (FPS) vs Batch Size per Resolution
+        ax1.grid(True, ls=":", alpha=0.6)
+        ax1.legend()
         for res in resolutions:
-            sub_df = df[df["resolution"] == res]
-            ax2.plot(sub_df["batch_size"], sub_df["throughput_fps"], marker="s", lw=2.0, label=f"Res {res}x{res}")
-
-        ax2.set_title("System Throughput (FPS) vs. Batch Dimension", fontsize=11, fontweight="bold")
-        ax2.set_xlabel("Inference Batch Size", fontsize=10, fontweight="bold")
-        ax2.set_ylabel("Throughput (Frames Per Second)", fontsize=10, fontweight="bold")
+            sub = df[df["resolution"] == res]
+            ax2.plot(sub["batch_size"], sub["throughput_fps"], marker="s", lw=2.0, label=f"{res}x{res}")
+        ax2.set_title("Throughput (batch / p50) vs. batch size", fontweight="bold")
+        ax2.set_xlabel("Batch size")
+        ax2.set_ylabel("Images per second")
         ax2.set_xticks(batch_sizes)
-        ax2.legend(frameon=True, fontsize=9)
+        ax2.grid(True, ls=":", alpha=0.6)
+        ax2.legend()
+        fig.suptitle(f"Detector scalability, PyTorch FP32 on {dev_name}", fontweight="bold")
+        fig.tight_layout()
+        fig.savefig(target_fig_dir / "scalability_batch_resolution.png", dpi=300)
+        plt.close(fig)
+        logger.info(f"Saved {csv_dest} and scalability figure")
 
-        plt.tight_layout()
-        fig_path = target_fig_dir / "scalability_batch_resolution.png"
-        plt.savefig(fig_path, dpi=300)
-        plt.close()
-        logger.info(f"Generated Scalability Figure -> {fig_path}")
-
+    runtime.cleanup()
     return df
 
 
 if __name__ == "__main__":
-    run_scalability_sweeps()
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--device", default=None)
+    args = parser.parse_args()
+    run_scalability_sweeps(device=args.device)

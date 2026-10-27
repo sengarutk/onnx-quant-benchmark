@@ -1,110 +1,83 @@
 #!/usr/bin/env python3
 """
-Generates disjoint representative calibration datasets for detection and industrial models.
+Generates the labeled synthetic CALIBRATION split, used both for static INT8 PTQ range calibration and for
+Q-Aware NMS threshold calibration. Verifies zero SHA-256 overlap with the test split.
+
+Output: data/calibration/{detection,industrial}/, data/calibration/manifest.json and manifest.csv
 """
 
+import argparse
 import csv
+import json
+import shutil
 import sys
 from pathlib import Path
-import cv2
-import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.common.hashes import compute_file_sha256
 from src.common.logging import setup_logger
-from src.common.seed import seed_everything
+from src.data.writers import write_detection_split, write_industrial_split, write_manifest
 
 logger = setup_logger("prepare_calibration_data")
 
 
 def generate_calibration_data(
-    detection_count: int = 50,
-    industrial_count: int = 50,
+    detection_count: int = 100,
+    industrial_count: int = 100,
     output_dir: Path = PROJECT_ROOT / "data" / "calibration",
 ) -> Path:
-    """
-    Synthesizes disjoint calibration datasets with unique random seeds ensuring 0% overlap with evaluation splits.
-    """
-    det_dir = output_dir / "detection"
-    ind_dir = output_dir / "industrial"
-    det_dir.mkdir(parents=True, exist_ok=True)
-    ind_dir.mkdir(parents=True, exist_ok=True)
+    """Writes the calibration split and returns the path of the CSV manifest."""
+    for sub in ("detection", "industrial"):
+        shutil.rmtree(output_dir / sub, ignore_errors=True)
 
-    manifest_rows = []
+    det = write_detection_split(output_dir / "detection", "calibration", detection_count, PROJECT_ROOT)
+    ind = write_industrial_split(output_dir / "industrial", "calibration", industrial_count, 0, PROJECT_ROOT)
+    write_manifest(output_dir / "manifest.json", "synthetic_edge_benchmark_calibration", "calibration", det, ind)
 
-    # 1. Generate Detection Calibration Images (Seed: 100)
-    seed_everything(100)
-    logger.info(f"Generating {detection_count} detection calibration images...")
-
-    for i in range(detection_count):
-        # Create realistic multi-channel noise + geometric shapes
-        img = np.random.randint(40, 210, (640, 640, 3), dtype=np.uint8)
-        # Draw background structures
-        for _ in range(5):
-            pt1 = (np.random.randint(0, 640), np.random.randint(0, 640))
-            pt2 = (np.random.randint(0, 640), np.random.randint(0, 640))
-            color = (int(np.random.randint(0, 255)), int(np.random.randint(0, 255)), int(np.random.randint(0, 255)))
-            cv2.rectangle(img, pt1, pt2, color, -1)
-
-        img_path = det_dir / f"calib_det_{i:03d}.jpg"
-        cv2.imwrite(str(img_path), img, [cv2.IMWRITE_JPEG_QUALITY, 95])
-
-        sha = compute_file_sha256(img_path)
-        manifest_rows.append({
-            "path": f"data/calibration/detection/{img_path.name}",
-            "category": "detection",
-            "split": "calibration",
-            "sha256": sha,
-        })
-
-    # 2. Generate Industrial Normal Calibration Textures (Seed: 200)
-    seed_everything(200)
-    logger.info(f"Generating {industrial_count} industrial normal calibration images...")
-
-    for i in range(industrial_count):
-        # Create continuous brushed metal texture
-        base_val = np.random.randint(110, 160)
-        grad = np.tile(np.linspace(base_val - 15, base_val + 15, 256, dtype=np.float32), (256, 1))
-        noise = np.random.normal(0, 4.0, (256, 256)).astype(np.float32)
-        texture = np.clip(grad + noise, 0, 255).astype(np.uint8)
-        img = cv2.cvtColor(texture, cv2.COLOR_GRAY2BGR)
-
-        img_path = ind_dir / f"calib_ind_{i:03d}.png"
-        cv2.imwrite(str(img_path), img)
-
-        sha = compute_file_sha256(img_path)
-        manifest_rows.append({
-            "path": f"data/calibration/industrial/{img_path.name}",
-            "category": "industrial",
-            "split": "calibration",
-            "sha256": sha,
-        })
-
-    # Write CSV manifest
     manifest_csv = output_dir / "manifest.csv"
     with open(manifest_csv, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["path", "category", "split", "sha256"])
+        writer = csv.DictWriter(f, fieldnames=["path", "category", "split", "sha256", "label_path"])
         writer.writeheader()
-        writer.writerows(manifest_rows)
+        for e in det:
+            writer.writerow({"path": e["image_path"], "category": "detection", "split": "calibration",
+                             "sha256": e["sha256"], "label_path": e["label_path"]})
+        for e in ind:
+            writer.writerow({"path": e["image_path"], "category": "industrial", "split": "calibration",
+                             "sha256": e["sha256"], "label_path": ""})
 
-    # Write README.md
-    readme_md = output_dir / "README.md"
-    readme_md.write_text(
-        f"""# Representative Calibration Dataset
+    # Disjointness audit against the test split (if present)
+    test_manifest = PROJECT_ROOT / "data" / "sample_images" / "manifest.json"
+    overlap = 0
+    if test_manifest.is_file():
+        test = json.loads(test_manifest.read_text(encoding="utf-8"))
+        test_hashes = {s["sha256"] for s in test["detection_samples"] + test["industrial_samples"]}
+        overlap = len(test_hashes & {e["sha256"] for e in det + ind})
+        if overlap:
+            raise RuntimeError(f"Calibration/test leakage detected: {overlap} identical files")
 
-- **Total Samples**: {len(manifest_rows)} ({detection_count} Detection, {industrial_count} Industrial Normal)
-- **Manifest**: `manifest.csv`
-- **Isolation Constraint**: 100% disjoint from `data/sample_images/` test splits.
+    (output_dir / "README.md").write_text(
+        f"""# Calibration Split
+
+- **Detection**: {len(det)} labeled images (YOLO-format labels in `detection/labels/`)
+- **Industrial**: {len(ind)} normal textures (no anomalies, matching unsupervised deployment)
+- **Manifests**: `manifest.json` (with ground truth), `manifest.csv` (paths + SHA-256)
+- **Disjointness**: generated from a separate seed range; verified SHA-256 overlap with the test split = {overlap}
 """,
         encoding="utf-8",
     )
-
-    logger.info(f"Calibration data saved: {manifest_csv} ({len(manifest_rows)} records)")
+    logger.info(f"Calibration split saved: {len(det)} detection + {len(ind)} industrial images (test overlap: {overlap})")
     return manifest_csv
 
 
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--detection", type=int, default=100)
+    parser.add_argument("--industrial", type=int, default=100)
+    args = parser.parse_args()
+    generate_calibration_data(args.detection, args.industrial)
+
+
 if __name__ == "__main__":
-    generate_calibration_data()
+    main()

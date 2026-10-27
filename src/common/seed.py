@@ -16,16 +16,15 @@ def seed_everything(seed: int = 42) -> None:
     """
     random.seed(seed)
     np.random.seed(seed)
+    # Note: PYTHONHASHSEED only takes effect for newly started interpreters (e.g. subprocesses),
+    # so it is exported for child processes rather than relied upon for this one.
     os.environ["PYTHONHASHSEED"] = str(seed)
 
     try:
         import torch
 
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
-            torch.backends.cudnn.deterministic = True
-            torch.backends.cudnn.benchmark = False
+        torch.manual_seed(seed)  # also seeds all CUDA devices
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
     except ImportError:
         pass
