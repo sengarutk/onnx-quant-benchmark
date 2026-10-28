@@ -37,6 +37,12 @@ An audit of v1.x found that several published results were not measured and must
 - **README, paper Table I and `runs.csv`** were taken from three different measurement sessions; several reported CVs,
   VRAM and RSS figures did not match any run. Hardware was misreported (the host CPU is an Intel Core i5-13450HX).
 - Several gates were hardcoded to pass, and Holm–Bonferroni, claimed in the paper, was not implemented.
+- **Publication claim:** the v1.1.0 README and release notes gave a BibTeX entry citing the paper in the *Proceedings
+  of the IEEE/ACM Conference on Connected and Edge Systems (EdgeSys)*. The paper was never submitted to EdgeSys or any
+  other venue; it is an unpublished preprint and must be cited only as the software (see `CITATION.cff`).
+
+The `v1.0.0` and `v1.1.0` tags were removed from GitHub on 2026-10-28 so that no published version presents these
+results; the commits remain in the history of `main` for transparency.
 
 ### Added
 - Procedural synthetic train / validation / calibration / test splits with disjoint seed ranges and a leakage check.

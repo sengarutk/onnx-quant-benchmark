@@ -254,7 +254,8 @@ paper/              manuscript (numbers via generated macros), figures, PDF
 ## Version history
 
 See [`CHANGELOG.md`](CHANGELOG.md). **v2.0.0 supersedes v1.x**, whose Q-Aware NMS, quality and stage-breakdown
-results were not measured (erratum in the changelog).
+results were not measured and whose README wrongly cited the paper as published at EdgeSys (erratum in the changelog).
+The paper has not been submitted to any venue.
 
 ## Citation
 
@@ -263,7 +264,7 @@ results were not measured (erratum in the changelog).
   author  = {Utkarsh Sengar},
   title   = {ONNX Edge Inference Benchmark: PyTorch vs ONNX Runtime FP32/FP16/INT8 with Quantization-Aware Post-Processing},
   year    = {2026},
-  version = {2.0.0},
+  version = {2.0.1},
   url     = {https://github.com/sengarutk/onnx-quant-benchmark}
 }
 ```
