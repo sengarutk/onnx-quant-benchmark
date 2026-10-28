@@ -82,6 +82,18 @@ def build_macros(df: pd.DataFrame, runs_meta: Dict, qa: Dict, sweep: pd.DataFram
             f"{k}-stable": "yes" if r["stable"] else "no",
             f"{k}-sizered": "n/a" if pd.isna(r["storage_compression_pct"]) else f"{r['storage_compression_pct']:.1f}",
         })
+    def _sci(x: float) -> str:
+        mant, exp = f"{x:.1e}".split("e")
+        return f"{mant}\\cdot 10^{{{int(exp)}}}"
+
+    v["fp32-maxrelerr"] = _sci(df[df["precision"] == "fp32"]["max_rel_error"].max())
+    v["fp16-maxrelerr"] = _sci(df[df["precision"] == "fp16"]["max_rel_error"].max())
+    gpu = df[df["provider"].str.contains("CUDA")]
+    ae = gpu[gpu["model"] == "industrial_autoencoder"].set_index("precision")["p50_model_ms"]
+    v["ae-gpu-fp16-gain"] = f"{ae['fp32'] / ae['fp16']:.1f}"
+    rv = json.loads((RES / "runtime_validation.json").read_text())
+    tf32 = [r for r in rv if r["runtime"].startswith("PyTorch CUDA (TF32")]
+    v["tf32-relerr"] = _sci(tf32[0]["max_rel_error"]) if tf32 else "n/a"
     v["n-configs"] = str(len(df))
     v["n-stable"] = str(int(df["stable"].sum()))
     v["n-gates-pass"] = str(int((df["numerical_gate"] & df["quality_passed"]).sum()))

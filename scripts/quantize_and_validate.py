@@ -42,6 +42,15 @@ QUANT_SETTINGS = {
 CALIBRATION_METHODS = ["MinMax", "Percentile", "Entropy"]
 
 
+def fp16_io_dtype(path: Path) -> str:
+    """Element type of the FP16 graph's inputs/outputs ('float32' when the converter could keep FP32 I/O)."""
+    import onnx
+
+    g = onnx.load(str(path), load_external_data=False).graph
+    types = {onnx.TensorProto.DataType.Name(t.type.tensor_type.elem_type) for t in list(g.input) + list(g.output)}
+    return "float16" if types == {"FLOAT16"} else "float32" if types == {"FLOAT"} else "mixed"
+
+
 def calibration_split_score(model: str, onnx_path: Path, fp32_path: Path, calib_json: Path) -> float:
     """
     Selection criterion computed on the CALIBRATION split only (never the test split):
@@ -111,6 +120,7 @@ def main() -> None:
         shutil.copy2(exp / candidates[selected]["file"], int8)
         (int8.with_name(int8.name + ".sha256")).write_text(f"{compute_file_sha256(int8)}  {int8.name}\n", encoding="utf-8")
         entry = {"calibration_images": len(paths), "fp32_size_mb": round(get_artifact_size_mb(fp32), 3),
+                 "fp16_io_dtype": fp16_io_dtype(fp16),
                  "int8_calibration_method": selected, "int8_method_ablation": candidates}
         for prec, path in (("fp16", fp16), ("int8", int8)):
             v = validate_quantized_model(model, prec, path, test_manifest, baseline)
@@ -137,7 +147,10 @@ def render_doc(report: dict, path: Path) -> None:
           "anomaly-map relative error vs FP32), "
           f"{'per-channel' if s['per_channel'] else 'per-tensor'} {s['weight_type']} weights, {s['activation_type']} activations "
           f"(symmetric), quantized op types: {', '.join(s['op_types'])}.",
-          "- **FP16**: `onnxconverter_common.float16.convert_float_to_float16` with FP32 graph inputs/outputs.",
+          "- **FP16**: `onnxconverter_common.float16.convert_float_to_float16`, keeping FP32 graph inputs/outputs when the "
+          "converter can (graph I/O dtype per model: "
+          + ", ".join(f"`{m}` {e['fp16_io_dtype']}" for m, e in report["models"].items())
+          + "; runtimes cast inputs to the graph's dtype).",
           f"- **Calibration data**: the labeled calibration split (`data/calibration/`, "
           f"{report['models']['yolo_nano']['calibration_images']} detection / "
           f"{report['models']['industrial_autoencoder']['calibration_images']} normal industrial images), generated from a "

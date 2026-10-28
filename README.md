@@ -19,7 +19,7 @@ nothing is hand-copied. The run records of the published session are in [`result
    *rose* (0.701 to 0.777) because the quantized scores re-rank low-confidence boxes. For the autoencoder it is 74.3%
    smaller, only 1.04x faster, and costs 0.016 image AUROC (within the 0.02 gate).
 3. **"FP32" on a modern GPU silently means TF32 unless disabled.** PyTorch's default cuDNN TF32 path broke parity
-   (rel. error 1.05e-4); with strict FP32 the autoencoder runs 3.9x slower than FP16 (3.90 vs 1.01 ms).
+   (rel. error 1.7e-4, [`results/runtime_validation.json`](results/runtime_validation.json)); with strict FP32 the autoencoder runs 3.9x slower than FP16 (3.90 vs 1.01 ms).
 4. **Model latency is not the bottleneck end to end.** For the detector on GPU, the model-path p50 is 1.61 ms, but the
    end-to-end p50 is 10.2 ms: decode + preprocess 2.8 ms, inference incl. copies 3.2 ms, NMS 3.8 ms (measured per stage).
 5. **Quantization-aware NMS calibration does not beat transferring the FP32-calibrated thresholds.** Re-tuning the
@@ -130,11 +130,11 @@ Reference: detector mAP@50 0.701 (mAP@50-95 0.501), autoencoder image AUROC 0.93
 <!-- BEGIN:table5_int8_quantization_audit -->
 | Model | Runtime | Precision | Method | Size vs FP32 ONNX | Speedup vs same-runtime FP32 | Quality delta | Gates |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| yolo_nano | PyTorch (PyTorch_CUDA:0) | FP16 | FP16 cast (onnxconverter-common, FP32 I/O) | n/a | 7.41x | +0.0035 | PASS |
-| yolo_nano | ORT_CPU (CPUExecutionProvider) | FP16 | FP16 cast (onnxconverter-common, FP32 I/O) | -49.9% | 0.99x | -0.0003 | PASS |
+| yolo_nano | PyTorch (PyTorch_CUDA:0) | FP16 | PyTorch `model.half()` | n/a | 7.41x | +0.0035 | PASS |
+| yolo_nano | ORT_CPU (CPUExecutionProvider) | FP16 | FP16 ONNX graph (onnxconverter-common) | -49.9% | 0.99x | -0.0003 | PASS |
 | yolo_nano | ORT_CPU (CPUExecutionProvider) | INT8 | Static QDQ, MinMax, symmetric, per-channel weights | -73.6% | 1.53x | +0.0763 | FAIL |
-| industrial_autoencoder | PyTorch (PyTorch_CUDA:0) | FP16 | FP16 cast (onnxconverter-common, FP32 I/O) | n/a | 5.61x | -0.0001 | PASS |
-| industrial_autoencoder | ORT_CPU (CPUExecutionProvider) | FP16 | FP16 cast (onnxconverter-common, FP32 I/O) | -49.9% | 0.69x | -0.0003 | PASS |
+| industrial_autoencoder | PyTorch (PyTorch_CUDA:0) | FP16 | PyTorch `model.half()` | n/a | 5.61x | -0.0001 | PASS |
+| industrial_autoencoder | ORT_CPU (CPUExecutionProvider) | FP16 | FP16 ONNX graph (onnxconverter-common) | -49.9% | 0.69x | -0.0003 | PASS |
 | industrial_autoencoder | ORT_CPU (CPUExecutionProvider) | INT8 | Static QDQ, MinMax, symmetric, per-channel weights | -74.3% | 1.04x | -0.0164 | PASS |
 <!-- END:table5_int8_quantization_audit -->
 

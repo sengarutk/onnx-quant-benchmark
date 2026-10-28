@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional, Union
 
 from src.common.config import QualityThresholdConfig, load_quality_thresholds
 from src.common.logging import setup_logger
-from src.validation.numerical_equivalence import evaluate_onnx_dataset
+from src.validation.numerical_equivalence import _rel, evaluate_onnx_dataset
 
 logger = setup_logger("validate_quantization")
 
@@ -51,7 +51,7 @@ def validate_quantized_model(
     return {
         "model_name": model_name,
         "precision": precision,
-        "onnx_path": str(onnx_p),
+        "onnx_path": _rel(onnx_p),
         "status": "PASS" if passed else "REJECTED",
         "rejection_reason": None if passed else f"{key} drop {-delta:.4f} exceeds {max_drop}",
         "gated_metric": key,

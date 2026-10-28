@@ -1,0 +1,79 @@
+[
+  {
+    "runtime": "PyTorch CPU",
+    "precision": "fp32",
+    "provider": "PyTorch_CPU",
+    "max_rel_error": 0.0,
+    "cosine_similarity": 1.0,
+    "status": "PASS",
+    "detail": "max rel. error 0.00e+00, cosine 1.000000"
+  },
+  {
+    "runtime": "PyTorch CUDA",
+    "precision": "fp32",
+    "provider": "PyTorch_CUDA:0",
+    "max_rel_error": 4.1968450916497704e-07,
+    "cosine_similarity": 0.999999999999991,
+    "status": "PASS",
+    "detail": "max rel. error 4.20e-07, cosine 1.000000"
+  },
+  {
+    "runtime": "PyTorch CUDA",
+    "precision": "fp16",
+    "provider": "PyTorch_CUDA:0",
+    "max_rel_error": 0.0021165622429432382,
+    "cosine_similarity": 0.9999997119149877,
+    "status": "PASS",
+    "detail": "max rel. error 2.12e-03, cosine 1.000000"
+  },
+  {
+    "runtime": "PyTorch CUDA (TF32 math, PyTorch default)",
+    "precision": "fp32",
+    "provider": "PyTorch_CUDA:0",
+    "max_rel_error": 0.00017249033326680556,
+    "cosine_similarity": 0.9999999990568615,
+    "status": "GATE FAIL",
+    "detail": "max rel. error 1.72e-04, cosine 1.000000"
+  },
+  {
+    "runtime": "ONNX Runtime CPU",
+    "precision": "fp32",
+    "provider": "CPUExecutionProvider",
+    "max_rel_error": 5.479214425209422e-07,
+    "cosine_similarity": 0.9999999999999908,
+    "status": "PASS",
+    "detail": "max rel. error 5.48e-07, cosine 1.000000"
+  },
+  {
+    "runtime": "ONNX Runtime CPU",
+    "precision": "fp16",
+    "provider": "CPUExecutionProvider",
+    "max_rel_error": 0.000592477947910624,
+    "cosine_similarity": 0.999999965512981,
+    "status": "PASS",
+    "detail": "max rel. error 5.92e-04, cosine 1.000000"
+  },
+  {
+    "runtime": "ONNX Runtime CPU",
+    "precision": "int8",
+    "provider": "CPUExecutionProvider",
+    "max_rel_error": 0.2022146518390575,
+    "cosine_similarity": 0.9992545403444759,
+    "status": "GATE FAIL",
+    "detail": "max rel. error 2.02e-01, cosine 0.999255"
+  },
+  {
+    "runtime": "ONNX Runtime CUDA",
+    "precision": "fp32/fp16",
+    "provider": "-",
+    "status": "NOT AVAILABLE",
+    "detail": "installed onnxruntime providers: ['AzureExecutionProvider', 'CPUExecutionProvider']"
+  },
+  {
+    "runtime": "TensorRT",
+    "precision": "fp32/fp16/int8",
+    "provider": "-",
+    "status": "NOT AVAILABLE",
+    "detail": "tensorrt Python bindings not installed"
+  }
+]

@@ -108,7 +108,8 @@ overlap is verified to be zero. The validation split is used only to select the 
 \res{qa-test-images} detection images (\res{qa-test-boxes} boxes) and 100 normal plus 100 anomalous textures.
 
 \subsection{Artifacts and runtimes}
-Models are exported to ONNX (opset 17) and simplified; FP16 graphs keep FP32 inputs and outputs; INT8 graphs use ONNX
+Models are exported to ONNX (opset 17) and simplified; FP16 graphs are converted with onnxconverter-common (FP32 graph
+inputs/outputs for the detector, FP16 for the autoencoder) and PyTorch FP16 uses \texttt{half()}; INT8 graphs use ONNX
 Runtime static QDQ quantization with MinMax calibration on the calibration split, per-channel symmetric weights, and
 Conv, ConvTranspose, MatMul and Gemm quantized. The matrix covers PyTorch eager on CPU and CUDA (FP32, FP16) and ONNX
 Runtime on CPU (FP32, FP16, INT8). ONNX Runtime CUDA and TensorRT back ends are implemented and are run automatically
@@ -160,8 +161,9 @@ mAP@50; autoencoder: image AUROC) with the delta to the FP32 reference, and mode
 \subsection{Models and parity}
 The trained detector reaches mAP@50 \res{det-map50} (mAP@50--95 \res{det-map5095}) on the test split and the autoencoder
 an image AUROC of \res{ae-imageauroc} (AU-PRO \res{ae-aupro}). ONNX export is exact up to floating-point reordering
-(maximum relative error $\le 10^{-6}$) and FP16 stays within $5\cdot 10^{-3}$ for both models. PyTorch's default TF32
-convolutions on the GPU produced a relative error of $1.05\cdot 10^{-4}$, failing the FP32 gate; the FP32 rows therefore
+(maximum relative error over all FP32 rows $\res{fp32-maxrelerr}$) and FP16 stays within $\res{fp16-maxrelerr}$ for
+both models. With PyTorch's default TF32 convolutions the GPU detector deviates by $\res{tf32-relerr}$, failing the
+FP32 gate ($10^{-4}$); the FP32 rows therefore
 use strict IEEE FP32 (TF32 disabled), which costs speed: the autoencoder takes \res{ae-pt-gpu-fp32-p50}\,ms in FP32 versus
 \res{ae-pt-gpu-fp16-p50}\,ms in FP16.
 
@@ -180,7 +182,7 @@ autoencoder (\res{ae-ort-cpu-fp32-p50} vs \res{ae-pt-cpu-fp32-p50}\,ms), i.e.\ t
 (Fig.~\ref{fig:speed}). FP16 graphs bring no CPU speedup ($\res{det-ort-cpu-fp16-speedupfp}\times$ and
 $\res{ae-ort-cpu-fp16-speedupfp}\times$ vs ORT FP32) because the CPU lacks native FP16 arithmetic. On the GPU the
 detector is launch-bound: FP16 (\res{det-pt-gpu-fp16-p50}\,ms) is not faster than FP32 (\res{det-pt-gpu-fp32-p50}\,ms),
-whereas the autoencoder gains $3.9\times$. The only configuration that missed the stability criterion was the detector
+whereas the autoencoder gains $\res{ae-gpu-fp16-gain}\times$. The only configuration that missed the stability criterion was the detector
 on PyTorch GPU FP32 (session CV \res{det-pt-gpu-fp32-cv}).
 
 \begin{figure}[t]

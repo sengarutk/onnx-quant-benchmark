@@ -42,7 +42,7 @@ class TestConfig:
             name="yolo_nano",
             task="detection",
             input_shape=[1, 3, 640, 640],
-            weights_path="models/weights/yolov8n.pt",
+            weights_path="models/weights/yolo_nano_trained.pt",
         )
         assert m.opset == 17
         assert m.input_shape == [1, 3, 640, 640]

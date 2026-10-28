@@ -20,6 +20,15 @@ FP32_MAX_REL_ERROR = 1e-5
 FP32_MIN_COSINE = 0.999999
 
 
+def _rel(path: Union[str, Path]) -> str:
+    """Repository-relative POSIX path when possible (keeps local absolute paths out of result files)."""
+    p = Path(path).resolve()
+    try:
+        return p.relative_to(PROJECT_ROOT).as_posix()
+    except ValueError:
+        return p.as_posix()
+
+
 def compare_pytorch_vs_onnx(
     torch_model: nn.Module,
     onnx_path: Union[str, Path],
@@ -76,4 +85,4 @@ def evaluate_onnx_dataset(
         metrics = evaluate_autoencoder(predict, manifest["industrial_samples"], dtype=dtype)
     else:
         raise ValueError(f"Unknown model_type: {model_type}")
-    return {"model_type": model_type, "onnx_path": str(onnx_path), "provider": provider, "metrics": metrics}
+    return {"model_type": model_type, "onnx_path": _rel(onnx_path), "provider": provider, "metrics": metrics}

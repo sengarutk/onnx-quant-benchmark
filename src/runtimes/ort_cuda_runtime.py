@@ -1,5 +1,5 @@
 """
-ONNX Runtime CUDA execution engine with CUDA IOBinding for zero host-device overhead.
+ONNX Runtime CUDA execution engine using IOBinding (device-resident inputs/outputs, no per-call output allocation).
 """
 
 import sys
@@ -101,7 +101,7 @@ class ORTCUDARuntime(BaseRuntime):
 
     def predict_device(self, input_tensor: torch.Tensor) -> Dict[str, torch.Tensor]:
         """
-        Executes zero-copy GPU inference using CUDA IOBinding.
+        Executes GPU inference with IOBinding; inputs already on the device are bound without a host round trip.
         """
         if self.session is None:
             self.load()

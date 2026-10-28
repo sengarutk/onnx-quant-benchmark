@@ -65,7 +65,7 @@ class TestRuntimesCUDA:
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="device buffers require CUDA")
     def test_ort_cuda_runtime_mocked_iobinding_execution(self, tmp_path: Path) -> None:
-        """Tests ORTCUDARuntime IOBinding and zero-copy dispatch using mocked ORT session."""
+        """Tests ORTCUDARuntime IOBinding dispatch using a mocked ORT session."""
         dummy_onnx = tmp_path / "dummy.onnx"
         dummy_onnx.write_bytes(b"ONNX_DUMMY_GRAPH")
 
@@ -81,7 +81,7 @@ class TestRuntimesCUDA:
 
         out_mock = MagicMock()
         out_mock.name = "output0"
-        out_mock.shape = [1, 84, 8400]
+        out_mock.shape = [1, 6, 8400]
         out_mock.type = "tensor(float)"
 
         mock_session.get_inputs.return_value = [inp_mock]

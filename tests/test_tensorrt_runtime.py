@@ -55,7 +55,7 @@ class TestTensorRTRuntime:
         mock_engine.create_execution_context.return_value = mock_context
         mock_engine.num_io_tensors = 2
         mock_engine.get_tensor_name.side_effect = lambda idx: ["images", "output0"][idx]
-        mock_engine.get_tensor_shape.side_effect = lambda name: [1, 3, 640, 640] if name == "images" else [1, 84, 8400]
+        mock_engine.get_tensor_shape.side_effect = lambda name: [1, 3, 640, 640] if name == "images" else [1, 6, 8400]
         mock_engine.get_tensor_dtype.return_value = mock_trt.DataType.FLOAT
         mock_engine.get_tensor_mode.side_effect = lambda name: mock_trt.TensorIOMode.INPUT if name == "images" else mock_trt.TensorIOMode.OUTPUT
 

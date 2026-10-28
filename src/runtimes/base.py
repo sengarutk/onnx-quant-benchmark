@@ -35,7 +35,7 @@ class BaseRuntime(ABC):
     @abstractmethod
     def predict_device(self, input_tensor: torch.Tensor) -> Dict[str, torch.Tensor]:
         """
-        Executes zero-copy forward inference on device-resident PyTorch tensors without PCIe copies.
+        Executes forward inference on device-resident PyTorch tensors (no host round trip for inputs already on the device).
 
         Args:
             input_tensor: PyTorch tensor already allocated on the target compute device.

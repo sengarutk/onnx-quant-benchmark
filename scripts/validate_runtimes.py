@@ -30,6 +30,15 @@ from src.runtimes.tensorrt_runtime import TRT_AVAILABLE, TensorRTRuntime
 from src.validation.output_checks import compute_tensor_diff
 
 logger = setup_logger("validate_runtimes")
+
+
+class TF32PyTorchRuntime(PyTorchRuntime):
+    """PyTorch CUDA FP32 with PyTorch's default TF32 tensor-core math re-enabled (to quantify its parity impact)."""
+
+    def load(self) -> None:
+        super().load()
+        torch.backends.cudnn.allow_tf32 = True
+        torch.backends.cuda.matmul.allow_tf32 = True
 EXP = PROJECT_ROOT / "models" / "exported"
 
 
@@ -53,6 +62,7 @@ def main() -> None:
             gate = load_quality_thresholds("yolo_nano", precision)
             ok = d["max_rel_error"] <= gate.max_rel_error and d["cosine_similarity"] >= gate.min_cosine_similarity
             rows.append({"runtime": name, "precision": precision, "provider": rt.get_active_provider(),
+                         "max_rel_error": d["max_rel_error"], "cosine_similarity": d["cosine_similarity"],
                          "status": "PASS" if ok else "GATE FAIL", "detail": f"max rel. error {d['max_rel_error']:.2e}, cosine {d['cosine_similarity']:.6f}"})
             rt.cleanup()
         except Exception as exc:  # noqa: BLE001 - recorded in the report
@@ -62,6 +72,9 @@ def main() -> None:
     if torch.cuda.is_available():
         check("PyTorch CUDA", "fp32", lambda: PyTorchRuntime(copy.deepcopy(adapter.model), device="cuda:0"))
         check("PyTorch CUDA", "fp16", lambda: PyTorchRuntime(copy.deepcopy(adapter.model), device="cuda:0", precision="fp16"))
+        check("PyTorch CUDA (TF32 math, PyTorch default)", "fp32", lambda: TF32PyTorchRuntime(copy.deepcopy(adapter.model), device="cuda:0"))
+        torch.backends.cudnn.allow_tf32 = False
+        torch.backends.cuda.matmul.allow_tf32 = False
     else:
         rows.append({"runtime": "PyTorch CUDA", "precision": "fp32/fp16", "provider": "-", "status": "NOT AVAILABLE",
                      "detail": "torch.cuda.is_available() is False"})
@@ -84,6 +97,8 @@ def main() -> None:
     for r in rows:
         logger.info(f"{r['runtime']} {r['precision']}: {r['status']} ({r['detail']})")
     render_doc(rows, PROJECT_ROOT / "docs" / "runtimes.md")
+    import json
+    (PROJECT_ROOT / "results" / "runtime_validation.json").write_text(json.dumps(rows, indent=2), encoding="utf-8")
     # Gate failures are reported results (e.g. a lossy INT8 graph); only execution errors fail the stage.
     if any(r["status"] == "ERROR" for r in rows):
         sys.exit(1)

@@ -75,7 +75,8 @@
           "recall": 0.9737,
           "f1": 0.0849
         }
-      }
+      },
+      "fp16_io_dtype": "float32"
     },
     "industrial_autoencoder": {
       "calibration_images": 100,
@@ -133,7 +134,8 @@
           "pixel_auroc": 0.6195,
           "aupro": 0.7993
         }
-      }
+      },
+      "fp16_io_dtype": "float16"
     }
   }
 }

@@ -115,7 +115,7 @@
     },
     "dataset": {
       "model_type": "yolo_nano",
-      "onnx_path": "/home/sengar/onnx-quant-benchmark/models/exported/yolo_nano_fp32_opset17.onnx",
+      "onnx_path": "models/exported/yolo_nano_fp32_opset17.onnx",
       "provider": "CPUExecutionProvider",
       "metrics": {
         "mAP_50": 0.7011,
@@ -270,7 +270,7 @@
     },
     "dataset": {
       "model_type": "industrial_autoencoder",
-      "onnx_path": "/home/sengar/onnx-quant-benchmark/models/exported/industrial_autoencoder_fp32_opset17.onnx",
+      "onnx_path": "models/exported/industrial_autoencoder_fp32_opset17.onnx",
       "provider": "CPUExecutionProvider",
       "metrics": {
         "image_auroc": 0.9309,

@@ -31,7 +31,9 @@ calibration and test files.
 
 * **FP32 ONNX**: `torch.onnx.export` (opset 17), simplified with onnxsim; parity vs PyTorch checked on a real test
   image (max relative error <= 1e-5, cosine >= 0.999999) and on the full test split (|metric delta| <= 0.001).
-* **FP16 ONNX**: `onnxconverter_common.float16` with FP32 graph inputs/outputs.
+* **FP16 ONNX**: `onnxconverter_common.float16`; the detector graph keeps FP32 inputs/outputs, the autoencoder graph
+  has FP16 inputs/outputs (the converter could not keep FP32 I/O around its residual `Sub`); runtimes cast inputs.
+  PyTorch FP16 uses `model.half()`.
 * **INT8 ONNX**: ONNX Runtime `quantize_static`, QDQ format, per-channel symmetric INT8 weights, symmetric UINT8
   activations; Conv, ConvTranspose, MatMul and Gemm quantized. The calibration method (MinMax / Percentile / Entropy)
   is selected per model on the calibration split (detector: calibration mAP@50; autoencoder: anomaly-map relative

@@ -71,7 +71,12 @@ def generate_table5_int8_audit(df: pd.DataFrame, output_path: Path, quant_method
                "Quality delta", "Gates"]
     rows = []
     for _, r in df[df["precision"].isin(["fp16", "int8"])].iterrows():
-        method = quant_method if r["precision"] == "int8" else "FP16 cast (onnxconverter-common, FP32 I/O)"
+        if r["precision"] == "int8":
+            method = quant_method
+        elif r["runtime"] == "PyTorch":
+            method = "PyTorch `model.half()`"
+        else:
+            method = "FP16 ONNX graph (onnxconverter-common)"
         red = "n/a" if pd.isna(r["storage_compression_pct"]) else f"{-r['storage_compression_pct']:+.1f}%"
         gates = "PASS" if (r["numerical_gate"] and r["quality_passed"]) else "FAIL"
         rows.append([str(r["model"]), f"{r['runtime']} ({r['provider']})", str(r["precision"]).upper(), method, red,
