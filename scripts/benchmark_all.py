@@ -14,7 +14,7 @@ import copy
 import json
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List
 import numpy as np
 import onnxruntime as ort
 import torch

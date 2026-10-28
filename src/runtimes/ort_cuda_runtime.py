@@ -4,7 +4,7 @@ ONNX Runtime CUDA execution engine using IOBinding (device-resident inputs/outpu
 
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import onnxruntime as ort
 import torch

@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.0.1 — Corrections and compatibility (2026-10-28)
+
+No measurement was re-run; every result file (`runs.csv`, `runs.json`, tables, Q-Aware and sweep data) is unchanged.
+
+- **CI fix:** PyTorch >= 2.9 switched `torch.onnx.export` to the dynamo exporter, which needs `onnxscript` and broke
+  the export, parity and quantization tests on CI (v2.0.0's CI run failed). The exporter is now requested explicitly
+  (`dynamo=False`), matching the published graphs. GitHub Actions moved to `checkout@v5` / `setup-python@v6`.
+- **Paper correction:** the paper stated that session-to-session variation stayed within ±5 % for all but one
+  configuration; the session data show 10 of 12 (the autoencoder ORT INT8 run also has two sessions 5.8–5.9 %
+  above its median). The sentence is now generated from `runs.json`.
+- **Figures** are drawn at their printed size with legible fonts (they were scaled to ~27 % in the paper), the
+  quality-vs-latency plot uses a legend instead of overlapping point labels, and two-panel figures span both
+  columns. Figures are numbered in citation order.
+- **Units:** all MB values are binary (2^20 bytes); this is now stated in the README, methodology and paper.
+- **Reproducible builds:** `paper/main.pdf` and `overleaf_paper.zip` are byte-identical across rebuilds (timestamps
+  pinned to the release date via `SOURCE_DATE_EPOCH`).
+- Removed 42 unused imports; `run_q_aware_ablation.py` and `run_scalability_sweep.py` gained `--plot-only`.
+
 ## v2.0.0 — Reproducible re-implementation (2026-10-27)
 
 v2.0.0 replaces the v1.x results end to end. Every number in the README, `results/`, `docs/` and the paper is now

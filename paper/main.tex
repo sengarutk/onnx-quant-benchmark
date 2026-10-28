@@ -9,6 +9,15 @@
 \usepackage{booktabs}
 \usepackage[caption=false,font=footnotesize]{subfig}
 \usepackage{hyperref}
+% Let figures pack onto text pages instead of drifting into near-empty float pages
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\dbltopfraction}{0.9}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.85}
+\renewcommand{\dblfloatpagefraction}{0.85}
+\setcounter{topnumber}{3}
+\setcounter{dbltopnumber}{3}
+\setcounter{totalnumber}{4}
 \hypersetup{colorlinks=true, linkcolor=blue, citecolor=blue, urlcolor=blue}
 
 % Every measured number in this manuscript is a macro generated from results/ by scripts/build_paper.py.
@@ -152,7 +161,7 @@ stability criterion and \res{n-gates-pass} passed both acceptance gates (Table~\
 \begin{table*}[t]
 \caption{Batch-1 results per configuration: pooled model-path latency (ms) with bootstrap 95\% CI, end-to-end p50,
 session-median CV, maximum relative output error vs PyTorch FP32 (CPU), task quality on the test split (detector:
-mAP@50; autoencoder: image AUROC) with the delta to the FP32 reference, and model size.}
+mAP@50; autoencoder: image AUROC) with the delta to the FP32 reference, and model size (MB = $2^{20}$ bytes).}
 \label{tab:main}
 \centering
 \resizebox{\textwidth}{!}{\input{generated/table_main.tex}}
@@ -168,14 +177,56 @@ use strict IEEE FP32 (TF32 disabled), which costs speed: the autoencoder takes \
 \res{ae-pt-gpu-fp16-p50}\,ms in FP16.
 
 \subsection{Latency}
-\begin{figure*}[t]
+\begin{figure*}[!t]
 \centering
-\subfloat[Speedup vs PyTorch FP32 on CPU]{\includegraphics[width=0.49\textwidth]{figures/speedup_comparison.png}}
-\hfill
-\subfloat[Quality vs model-path latency]{\includegraphics[width=0.49\textwidth]{figures/pareto_quality_vs_latency.png}}
+\subfloat[Speedup vs PyTorch FP32 on CPU]{\includegraphics[width=\textwidth]{figures/speedup_comparison.png}}
+\\[2pt]
+\subfloat[Quality vs model-path latency]{\includegraphics[width=\textwidth]{figures/pareto_quality_vs_latency.png}}
 \caption{Model-path speedups and task quality versus latency (batch 1; 95\% CIs as error bars).}
 \label{fig:speed}
 \end{figure*}
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\linewidth]{figures/latency_breakdown_stacked.png}
+\caption{Measured end-to-end stage medians (decode + preprocess, inference including host--device copies, post-processing).}
+\label{fig:stages}
+\end{figure}
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\linewidth]{figures/q_aware_pareto_recovery.png}
+\caption{Detection $F_1$ at default, FP32-calibrated and per-configuration calibrated post-processing thresholds.}
+\label{fig:qaware}
+\end{figure}
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{figures/decision_flip_attribution.png}
+\caption{Decision-flip attribution against PyTorch FP32 at default and calibrated thresholds.}
+\label{fig:flips}
+\end{figure*}
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{figures/scalability_batch_resolution.png}
+\caption{Detector latency and throughput (batch / p50) across batch size and input resolution, PyTorch FP32 on the GPU.}
+\label{fig:scal}
+\end{figure*}
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{figures/memory_vs_footprint.png}
+\caption{Serialized model size per precision and peak PyTorch GPU allocation.}
+\label{fig:mem}
+\end{figure*}
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{figures/stability_variance_trends.png}
+\caption{Per-session median latency normalized by the median across sessions.}
+\label{fig:stab}
+\end{figure*}
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\linewidth]{figures/tail_latency_p50_p95.png}
+\caption{Tail-to-median latency ratios of the pooled model-path measurements.}
+\label{fig:tail}
+\end{figure}
 On the CPU, ONNX Runtime FP32 is $\res{det-ort-cpu-fp32-speedup}\times$ faster than PyTorch for the detector
 (\res{det-ort-cpu-fp32-p50} vs \res{det-pt-cpu-fp32-p50}\,ms) but $\res{ae-ort-cpu-fp32-speedup}\times$ for the
 autoencoder (\res{ae-ort-cpu-fp32-p50} vs \res{ae-pt-cpu-fp32-p50}\,ms), i.e.\ the runtime choice is model-dependent
@@ -185,12 +236,6 @@ detector is launch-bound: FP16 (\res{det-pt-gpu-fp16-p50}\,ms) is not faster tha
 whereas the autoencoder gains $\res{ae-gpu-fp16-gain}\times$. The only configuration that missed the stability criterion was the detector
 on PyTorch GPU FP32 (session CV \res{det-pt-gpu-fp32-cv}).
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figures/latency_breakdown_stacked.png}
-\caption{Measured end-to-end stage medians (decode + preprocess, inference including host--device copies, post-processing).}
-\label{fig:stages}
-\end{figure}
 End to end, model execution is a minority of the detector's latency on the GPU (Fig.~\ref{fig:stages}): decode and
 preprocessing take \res{det-pt-gpu-fp32-pre}\,ms, inference including copies \res{det-pt-gpu-fp32-inf}\,ms and NMS
 \res{det-pt-gpu-fp32-post}\,ms, for an end-to-end p50 of \res{det-pt-gpu-fp32-e2e}\,ms. NMS is expensive here because the
@@ -218,12 +263,6 @@ reference (FP32-thr.), and with each configuration's own calibration; the precis
 \centering
 \resizebox{\columnwidth}{!}{\input{generated/table_qaware.tex}}
 \end{table}
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figures/q_aware_pareto_recovery.png}
-\caption{Detection $F_1$ at default, FP32-calibrated and per-configuration calibrated post-processing thresholds.}
-\label{fig:qaware}
-\end{figure}
 Calibrating the two post-processing thresholds on the calibration split is decisive for this detector: $F_1$ rises from
 \res{qa0-f1def} to \res{qa0-f1cal} for the FP32 reference (Table~\ref{tab:qaware}, Fig.~\ref{fig:qaware}; Holm-corrected
 $p = \res{qa0-pholm}$), with the optimum at a high confidence and a low IoU threshold. This gain is generic, however: every
@@ -245,44 +284,15 @@ Fig.~\ref{fig:flips}). FP16 leaves the calibrated detections unchanged, whereas 
 decisions (\res{fl3-cal-flips} flips) even at calibrated thresholds, \res{fl3-cal-fpshare}\% of them false-positive
 changes; at the default thresholds $\Phi = \res{fl3-def-rate}$. A deployment that relies on individual detections
 (e.g.\ counting or alarms) should therefore validate INT8 at the decision level, not only by mAP.
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figures/decision_flip_attribution.png}
-\caption{Decision-flip attribution against PyTorch FP32 at default and calibrated thresholds.}
-\label{fig:flips}
-\end{figure}
 
 \subsection{Scalability, memory and stability}
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figures/scalability_batch_resolution.png}
-\caption{Detector latency and throughput (batch / p50) across batch size and input resolution, PyTorch FP32 on the GPU.}
-\label{fig:scal}
-\end{figure}
 At batch 1 the detector's GPU latency is flat across resolutions (\res{sw-320-1-p50}\,ms at 320\,px,
 \res{sw-640-1-p50}\,ms at 640\,px), confirming launch-bound execution; batching raises throughput to
 \res{sw-320-8-fps} images/s at 320\,px and \res{sw-640-8-fps} images/s at 640\,px with batch 8 (Fig.~\ref{fig:scal}).
 Peak PyTorch GPU allocations were \res{det-pt-gpu-fp32-vram}\,MB (detector) and \res{ae-pt-gpu-fp32-vram}\,MB
-(autoencoder) in FP32 (Fig.~\ref{fig:mem}). Session-to-session variation stayed within $\pm$5\% for all but one
-configuration (Fig.~\ref{fig:stab}).
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figures/memory_vs_footprint.png}
-\caption{Serialized model size per precision and peak PyTorch GPU allocation.}
-\label{fig:mem}
-\end{figure}
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figures/stability_variance_trends.png}
-\caption{Per-session median latency normalized by the median across sessions.}
-\label{fig:stab}
-\end{figure}
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{figures/tail_latency_p50_p95.png}
-\caption{Tail-to-median latency ratios of the pooled model-path measurements.}
-\label{fig:tail}
-\end{figure}
+(autoencoder) in FP32 (Fig.~\ref{fig:mem}). Every session median stayed within $\pm$5\% of its configuration's
+median for \res{n-within5} of \res{n-configs} configurations; the largest deviation was \res{max-session-dev}\% (one
+session of the detector on the GPU in FP32, the configuration that failed the CV criterion; Fig.~\ref{fig:stab}).
 Tail latency is largest on the GPU at batch 1 (Fig.~\ref{fig:tail}), where host scheduling jitter matters most relative to
 millisecond-scale kernels.
 

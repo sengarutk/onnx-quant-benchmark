@@ -4,7 +4,7 @@ PyTorch Eager Runtime wrapper supporting CPU and CUDA execution with standard ou
 
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 import numpy as np
 import torch
 import torch.nn as nn

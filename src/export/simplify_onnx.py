@@ -2,12 +2,9 @@
 ONNX graph simplification utility with constant folding and equivalence auditing.
 """
 
-import shutil
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple, Union
-import numpy as np
 import onnx
-import onnxruntime as ort
 import onnxsim
 
 from src.common.hashes import compute_file_sha256

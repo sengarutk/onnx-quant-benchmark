@@ -1,7 +1,6 @@
 """Unit tests for the multi-session StabilityAnalyzer."""
 
 import numpy as np
-import pytest
 
 from src.benchmarking.stability import (
     StabilityAnalyzer,

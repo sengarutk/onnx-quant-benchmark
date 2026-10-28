@@ -4,7 +4,7 @@ Measures detection flip rate (Phi) between reference (FP32) and target (quantize
 partitioning flips into True Positive and False Positive decision changes.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import numpy as np
 from src.validation.detection_quality import box_iou
 

@@ -3,7 +3,6 @@ Unit tests for Quantization Decision-Change Attribution & Detection Flips.
 """
 
 import numpy as np
-import pytest
 
 from src.analysis.decision_flips import compute_detection_flips
 

@@ -46,6 +46,7 @@ from src.runtimes.ort_cuda_runtime import ORTCUDARuntime
 from src.runtimes.pytorch_runtime import PyTorchRuntime
 from src.validation.detection_quality import evaluate_detection_dataset
 from src.validation.task_eval import MAP_CONF_THRESHOLD, run_detector, score_detections
+from src.visualization.style import ANNOTATION_FONTSIZE as ANN, COLUMN_WIDTH_IN, TEXT_WIDTH_IN
 
 logger = setup_logger("run_q_aware_ablation")
 EXPORTED = PROJECT_ROOT / "models" / "exported"
@@ -200,29 +201,30 @@ def _plot(out: Dict[str, Any], fig_dir: Path) -> None:
     labels = [r["config"] for r in rows]
     y = np.arange(len(rows))
 
-    fig, ax = plt.subplots(figsize=(10, 0.8 * len(rows) + 2.2), dpi=300)
+    fig, ax = plt.subplots(figsize=(COLUMN_WIDTH_IN, 0.42 * len(rows) + 1.3))
     for i, r in enumerate(rows):
         d, c = r["default"]["f1"], r["calibrated"]["f1"]
-        ax.plot([d, c], [i, i], color="#888", lw=2, zorder=2)
-        ax.scatter(d, i, s=80, color="#4575b4", edgecolor="black", zorder=3, label="Default (0.25, 0.45)" if i == 0 else None)
-        ax.scatter(r["fp32_transfer"]["f1"], i, s=70, marker="s", color="#fdae61", edgecolor="black", zorder=3,
-                   label="FP32-calibrated thresholds (transferred)" if i == 0 else None)
-        ax.scatter(c, i, s=90, marker="^", color="#d73027", edgecolor="black", zorder=4, label="Own calibration (Q-Aware)" if i == 0 else None)
-        ax.annotate(f"own vs FP32-thr.: {r['delta_f1_vs_transfer']:+.3f}\n"
+        ax.plot([d, c], [i, i], color="#888", lw=1.2, zorder=2)
+        ax.scatter(d, i, s=22, color="#4575b4", edgecolor="black", lw=0.5, zorder=3, label="Default (0.25, 0.45)" if i == 0 else None)
+        ax.scatter(r["fp32_transfer"]["f1"], i, s=20, marker="s", color="#fdae61", edgecolor="black", lw=0.5, zorder=3,
+                   label="FP32-calibrated (transferred)" if i == 0 else None)
+        ax.scatter(c, i, s=26, marker="^", color="#d73027", edgecolor="black", lw=0.5, zorder=4, label="Own calibration (Q-Aware)" if i == 0 else None)
+        ax.annotate(f"own vs FP32-thr. \u0394F1 {r['delta_f1_vs_transfer']:+.3f} "
                     f"[{r['delta_f1_vs_transfer_ci95'][0]:+.3f}, {r['delta_f1_vs_transfer_ci95'][1]:+.3f}]",
-                    (max(d, c, r["fp32_transfer"]["f1"]), i), textcoords="offset points", xytext=(10, -8), fontsize=8)
+                    ((d + c) / 2, i), textcoords="offset points", xytext=(0, 5), ha="center", fontsize=ANN)
     ax.set_yticks(y)
     ax.set_yticklabels(labels)
     ax.invert_yaxis()
     ax.set_xlabel("Test-split micro F1 (IoU 0.50)")
-    ax.set_title("Q-Aware NMS: F1 at default, FP32-transferred and own calibrated thresholds", fontweight="bold")
+    ax.set_title("Q-Aware NMS: F1 per threshold policy", fontweight="bold")
     lo = min(min(r["default"]["f1"], r["calibrated"]["f1"], r["fp32_transfer"]["f1"]) for r in rows)
     hi = max(max(r["default"]["f1"], r["calibrated"]["f1"], r["fp32_transfer"]["f1"]) for r in rows)
-    ax.set_xlim(lo - 0.03, hi + 0.22)
+    ax.set_xlim(lo - 0.1, hi + 0.08)
+    ax.set_ylim(len(rows) - 0.4, -0.6)
     ax.grid(True, ls=":", alpha=0.5, axis="x")
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.14), ncol=3, fontsize=8, frameon=False)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.42, -0.2), ncol=2, frameon=False)
     fig.tight_layout()
-    fig.savefig(fig_dir / "q_aware_pareto_recovery.png", dpi=300, bbox_inches="tight")
+    fig.savefig(fig_dir / "q_aware_pareto_recovery.png", bbox_inches="tight")
     plt.close(fig)
 
     targets = out["flips"][1:]
@@ -230,7 +232,7 @@ def _plot(out: Dict[str, Any], fig_dir: Path) -> None:
         return f[key]["total_flips"] / max(f[key]["total_matched_boxes"] + f[key]["total_flips"], 1)
 
     ymax = max([_share(f, k) for f in targets for k in ("default_thresholds", "calibrated_thresholds")] + [0.04])
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4.8), dpi=300, sharey=True)
+    fig, axes = plt.subplots(1, 2, figsize=(TEXT_WIDTH_IN, 2.8), sharey=True)
     parts = [("lost_tps", "Lost TPs", "#4575b4"), ("new_tps", "New TPs", "#91bfdb"),
              ("new_fps", "New FPs", "#d73027"), ("suppressed_fps", "Suppressed FPs", "#fc8d59")]
     for ax, key, title in zip(axes, ("default_thresholds", "calibrated_thresholds"),
@@ -239,24 +241,30 @@ def _plot(out: Dict[str, Any], fig_dir: Path) -> None:
         bottom = np.zeros(len(targets))
         for k, lbl, col in parts:
             vals = np.array([f[key][k] / max(f[key]["total_matched_boxes"] + f[key]["total_flips"], 1) for f in targets])
-            ax.bar(x, vals, 0.55, bottom=bottom, label=lbl, color=col, edgecolor="black", lw=0.6)
+            ax.bar(x, vals, 0.55, bottom=bottom, label=lbl, color=col, edgecolor="black", lw=0.5)
             bottom += vals
         for i, f in enumerate(targets):
-            ax.text(i, bottom[i], f"Phi={f[key]['flip_rate']:.3f}\n({f[key]['total_flips']} flips)", ha="center", va="bottom", fontsize=8)
+            ax.text(i, bottom[i], f"Phi={f[key]['flip_rate']:.3f}\n({f[key]['total_flips']} flips)", ha="center", va="bottom", fontsize=ANN)
         ax.set_xticks(x)
-        ax.set_xticklabels([f["config"] for f in targets], rotation=15, fontsize=8)
+        ax.set_xticklabels([f["config"] for f in targets])
         ax.set_title(title, fontweight="bold")
         ax.grid(True, ls=":", alpha=0.5, axis="y")
     axes[0].set_ylabel("Share of decision events vs PyTorch FP32")
     axes[0].set_ylim(0, ymax * 1.35)
-    axes[1].legend(loc="upper right", fontsize=8)
+    axes[1].legend(loc="upper left")
     fig.suptitle("Decision-change (flip) attribution vs PyTorch FP32 reference (test split)", fontweight="bold")
     fig.tight_layout()
-    fig.savefig(fig_dir / "decision_flip_attribution.png", dpi=300)
+    fig.savefig(fig_dir / "decision_flip_attribution.png", bbox_inches="tight")
     plt.close(fig)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--results-dir", default=str(PROJECT_ROOT / "results"))
-    run_q_aware_nms_ablation(Path(parser.parse_args().results_dir))
+    parser.add_argument("--plot-only", action="store_true", help="Redraw the figures from the saved q_aware_nms.json")
+    args = parser.parse_args()
+    if args.plot_only:
+        res = Path(args.results_dir)
+        _plot(json.loads((res / "q_aware_nms.json").read_text(encoding="utf-8")), res / "figures")
+    else:
+        run_q_aware_nms_ablation(Path(args.results_dir))

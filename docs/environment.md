@@ -16,6 +16,9 @@ python -m pip install -r requirements.txt
   `CUDAExecutionProvider` silently disappears (check with
   `python -c "import onnxruntime as o; print(o.get_available_providers())"`).
 * TensorRT is optional (`pip install tensorrt`); engines are built with `scripts/build_trt_engines.sh`.
+* ONNX export uses PyTorch's TorchScript-based exporter (`dynamo=False`), which produced the published graphs.
+  PyTorch >= 2.9 defaults to the dynamo exporter and prints a deprecation warning for the TorchScript one; the
+  results were produced with PyTorch 2.5.1 and CI runs the test suite against the latest CPU release.
 
 ## Components
 

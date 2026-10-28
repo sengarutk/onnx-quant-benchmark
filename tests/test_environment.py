@@ -4,7 +4,6 @@ Unit tests for hardware and environment introspection routines.
 
 from pathlib import Path
 from unittest.mock import patch
-import pytest
 
 from src.common.environment import (
     EnvironmentManifest,

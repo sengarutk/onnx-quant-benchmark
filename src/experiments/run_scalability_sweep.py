@@ -11,9 +11,6 @@ import argparse
 import sys
 from pathlib import Path
 from typing import List, Optional
-import matplotlib
-
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -29,6 +26,7 @@ from src.common.logging import setup_logger
 from src.common.seed import seed_everything
 from src.models.yolo_adapter import YOLOAdapter
 from src.runtimes.pytorch_runtime import PyTorchRuntime
+from src.visualization.style import TEXT_WIDTH_IN
 
 logger = setup_logger("run_scalability_sweep")
 
@@ -88,39 +86,51 @@ def run_scalability_sweeps(
         csv_dest.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(csv_dest, index=False)
 
-        target_fig_dir = Path(fig_dir) if fig_dir else PROJECT_ROOT / "results" / "figures"
-        target_fig_dir.mkdir(parents=True, exist_ok=True)
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.0, 5.0), dpi=300)
-        for bs in batch_sizes:
-            sub = df[df["batch_size"] == bs]
-            ax1.plot(sub["resolution"], sub["p50_ms"], marker="o", lw=2.0, label=f"Batch {bs}")
-        ax1.set_title("Batch latency p50 vs. input resolution", fontweight="bold")
-        ax1.set_xlabel("Input resolution (square, px)")
-        ax1.set_ylabel("Model-path latency p50 per batch (ms)")
-        ax1.set_xticks(resolutions)
-        ax1.grid(True, ls=":", alpha=0.6)
-        ax1.legend()
-        for res in resolutions:
-            sub = df[df["resolution"] == res]
-            ax2.plot(sub["batch_size"], sub["throughput_fps"], marker="s", lw=2.0, label=f"{res}x{res}")
-        ax2.set_title("Throughput (batch / p50) vs. batch size", fontweight="bold")
-        ax2.set_xlabel("Batch size")
-        ax2.set_ylabel("Images per second")
-        ax2.set_xticks(batch_sizes)
-        ax2.grid(True, ls=":", alpha=0.6)
-        ax2.legend()
-        fig.suptitle(f"Detector scalability, PyTorch FP32 on {dev_name}", fontweight="bold")
-        fig.tight_layout()
-        fig.savefig(target_fig_dir / "scalability_batch_resolution.png", dpi=300)
-        plt.close(fig)
+        plot_scalability(df, Path(fig_dir) if fig_dir else PROJECT_ROOT / "results" / "figures")
         logger.info(f"Saved {csv_dest} and scalability figure")
 
     runtime.cleanup()
     return df
 
 
+def plot_scalability(df: pd.DataFrame, fig_dir: Path) -> Path:
+    """Latency vs resolution and throughput vs batch size from a sweep table (results/scalability_sweep.csv)."""
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    resolutions = sorted(df["resolution"].unique())
+    batch_sizes = sorted(df["batch_size"].unique())
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(TEXT_WIDTH_IN, 2.7))
+    for bs in batch_sizes:
+        sub = df[df["batch_size"] == bs]
+        ax1.plot(sub["resolution"], sub["p50_ms"], marker="o", label=f"Batch {bs}")
+    ax1.set_title("Batch latency p50 vs. input resolution", fontweight="bold")
+    ax1.set_xlabel("Input resolution (square, px)")
+    ax1.set_ylabel("Model-path p50 per batch (ms)")
+    ax1.set_xticks(resolutions)
+    ax1.grid(True, ls=":", alpha=0.6)
+    ax1.legend()
+    for res in resolutions:
+        sub = df[df["resolution"] == res]
+        ax2.plot(sub["batch_size"], sub["throughput_fps"], marker="s", label=f"{res}x{res}")
+    ax2.set_title("Throughput (batch / p50) vs. batch size", fontweight="bold")
+    ax2.set_xlabel("Batch size")
+    ax2.set_ylabel("Images per second")
+    ax2.set_xticks(batch_sizes)
+    ax2.grid(True, ls=":", alpha=0.6)
+    ax2.legend()
+    fig.suptitle(f"Detector scalability, PyTorch FP32 on {df['device'].iloc[0]}", fontweight="bold")
+    fig.tight_layout()
+    path = fig_dir / "scalability_batch_resolution.png"
+    fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
+    return path
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--device", default=None)
+    parser.add_argument("--plot-only", action="store_true", help="Redraw the figure from results/scalability_sweep.csv")
     args = parser.parse_args()
-    run_scalability_sweeps(device=args.device)
+    if args.plot_only:
+        plot_scalability(pd.read_csv(PROJECT_ROOT / "results" / "scalability_sweep.csv"), PROJECT_ROOT / "results" / "figures")
+    else:
+        run_scalability_sweeps(device=args.device)

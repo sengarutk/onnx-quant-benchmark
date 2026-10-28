@@ -11,7 +11,6 @@ from src.common.config import (
     MasterConfig,
     ModelConfig,
     PathConfig,
-    QualityThresholdConfig,
     RuntimeConfig,
     load_config,
     save_config,

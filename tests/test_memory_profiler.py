@@ -3,7 +3,6 @@ Unit tests for MemoryProfiler and artifact disk footprint sizing.
 """
 
 from pathlib import Path
-import pytest
 import torch
 
 from src.benchmarking.memory import MemoryProfiler, get_artifact_size_mb

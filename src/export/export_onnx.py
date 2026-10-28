@@ -2,12 +2,12 @@
 Canonical ONNX export routines targeting Opset 17 with metadata injection and checksum hashing.
 """
 
+import inspect
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 import onnx
 import torch
 import torch.nn as nn
@@ -78,6 +78,9 @@ def export_to_onnx(
     model.eval()
     logger.info(f"Exporting model -> {target_path} (Opset: {opset_version})...")
 
+    # The TorchScript-based exporter produced the published graphs. PyTorch >= 2.9 defaults to the dynamo exporter
+    # (which needs `onnxscript` and emits a different graph), so request the TorchScript exporter explicitly.
+    legacy = {"dynamo": False} if "dynamo" in inspect.signature(torch.onnx.export).parameters else {}
     with torch.inference_mode():
         torch.onnx.export(
             model,
@@ -89,6 +92,7 @@ def export_to_onnx(
             input_names=input_names,
             output_names=output_names,
             dynamic_axes=dynamic_axes,
+            **legacy,
         )
 
     # Ingest exported model to inject custom metadata properties

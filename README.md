@@ -42,7 +42,7 @@ For each *(model × runtime × precision)* configuration, one benchmark session 
 | **End-to-end latency** | decode → preprocess → inference (incl. host↔device copies) → NMS / anomaly scoring, **each stage timed** |
 | **Numerical parity** | every output tensor vs PyTorch FP32 on CPU (max relative error, cosine), gated per precision |
 | **Task quality** | the full test split re-evaluated **through the runtime under test** (mAP@50 / image AUROC), gated per precision |
-| **Memory / size** | peak PyTorch CUDA allocation, process RSS, serialized model size |
+| **Memory / size** | peak PyTorch CUDA allocation, process RSS, serialized model size (MB = 2^20 bytes) |
 
 Gates live in [`configs/`](configs/) and were fixed before the published run. Details: [`docs/methodology.md`](docs/methodology.md).
 

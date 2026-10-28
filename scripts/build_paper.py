@@ -8,9 +8,15 @@ Builds the paper from measured results only.
 3. Copies the figures from results/figures/ to paper/figures/.
 4. Compiles paper/main.pdf when pdflatex + bibtex are available.
 5. Packs overleaf_paper.zip (main.tex, references.bib, generated/, figures/) with a flat root.
+
+The PDF and zip are byte-reproducible: their timestamps are pinned to the release date in CITATION.cff
+(SOURCE_DATE_EPOCH), so rebuilding from unchanged inputs leaves the committed files untouched.
 """
 
+import datetime as dt
 import json
+import os
+import re
 import shutil
 import subprocess
 import sys
@@ -96,6 +102,13 @@ def build_macros(df: pd.DataFrame, runs_meta: Dict, qa: Dict, sweep: pd.DataFram
     v["tf32-relerr"] = _sci(tf32[0]["max_rel_error"]) if tf32 else "n/a"
     v["n-configs"] = str(len(df))
     v["n-stable"] = str(int(df["stable"].sum()))
+    devs = []
+    for rec in runs_meta["runs"]:
+        sp = [float(x) for x in rec["stability_audit"]["session_p50_values"]]
+        med = sorted(sp)[len(sp) // 2] if len(sp) % 2 else sum(sorted(sp)[len(sp) // 2 - 1:len(sp) // 2 + 1]) / 2
+        devs.append(max(abs(x / med - 1.0) for x in sp))
+    v["n-within5"] = str(sum(d <= 0.05 for d in devs))
+    v["max-session-dev"] = f"{100 * max(devs):.1f}"
     v["n-gates-pass"] = str(int((df["numerical_gate"] & df["quality_passed"]).sum()))
     v["session-id"] = _tex(runs_meta["session"]["session_id"])
     env = runs_meta["runs"][0]["environment_manifest"]
@@ -209,14 +222,23 @@ def write_tables(df: pd.DataFrame, qa: Dict) -> None:
         encoding="utf-8")
 
 
+def release_datetime() -> dt.datetime:
+    """Release date from CITATION.cff (midnight UTC), used to pin PDF/zip timestamps."""
+    m = re.search(r"^date-released:\s*['\"]?(\d{4}-\d{2}-\d{2})", (ROOT / "CITATION.cff").read_text(), re.M)
+    if not m:
+        raise RuntimeError("CITATION.cff has no date-released")
+    return dt.datetime.strptime(m.group(1), "%Y-%m-%d").replace(tzinfo=dt.timezone.utc)
+
+
 def compile_pdf() -> bool:
     if not shutil.which("pdflatex") or not shutil.which("bibtex"):
         print("pdflatex/bibtex not found; skipping PDF build")
         return False
+    env = dict(os.environ, SOURCE_DATE_EPOCH=str(int(release_datetime().timestamp())), FORCE_SOURCE_DATE="1")
     for cmd in (["pdflatex", "-interaction=nonstopmode", "-halt-on-error", "main.tex"], ["bibtex", "main"],
                 ["pdflatex", "-interaction=nonstopmode", "-halt-on-error", "main.tex"],
                 ["pdflatex", "-interaction=nonstopmode", "-halt-on-error", "main.tex"]):
-        res = subprocess.run(cmd, cwd=PAPER, capture_output=True, text=True)
+        res = subprocess.run(cmd, cwd=PAPER, capture_output=True, text=True, env=env)
         if res.returncode != 0:
             print(res.stdout[-3000:])
             raise RuntimeError(f"{' '.join(cmd)} failed")
@@ -230,13 +252,16 @@ def compile_pdf() -> bool:
 
 def pack_zip() -> Path:
     zip_path = ROOT / "overleaf_paper.zip"
+    stamp = release_datetime().timetuple()[:6]
+    entries = [(PAPER / "main.tex", "main.tex"), (PAPER / "references.bib", "references.bib")]
+    entries += [(p, f"generated/{p.name}") for p in sorted(GEN.glob("*.tex"))]
+    entries += [(PAPER / "figures" / name, f"figures/{name}") for name in FIGURES]
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.write(PAPER / "main.tex", "main.tex")
-        zf.write(PAPER / "references.bib", "references.bib")
-        for p in sorted(GEN.glob("*.tex")):
-            zf.write(p, f"generated/{p.name}")
-        for name in FIGURES:
-            zf.write(PAPER / "figures" / name, f"figures/{name}")
+        for src, arcname in entries:
+            info = zipfile.ZipInfo(arcname, date_time=stamp)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            zf.writestr(info, src.read_bytes())
     return zip_path
 
 

@@ -4,7 +4,6 @@ Unit tests for detection and anomaly evaluation quality engines.
 """
 
 import numpy as np
-import pytest
 
 from src.validation.anomaly_quality import compute_aupro, compute_image_auroc, compute_pixel_auroc
 from src.validation.detection_quality import box_iou, compute_ap, evaluate_detection_dataset

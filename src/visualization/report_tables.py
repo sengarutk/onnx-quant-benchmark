@@ -4,7 +4,7 @@ Gate verdicts are read from the run records; nothing is re-thresholded here.
 """
 
 from pathlib import Path
-from typing import Callable, List
+from typing import List
 import pandas as pd
 
 

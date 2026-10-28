@@ -4,7 +4,6 @@ Unit tests for ONNX export, graph verification, simplification, and inspection.
 
 from pathlib import Path
 import onnx
-import pytest
 import torch
 import torch.nn as nn
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "onnx-edge-inference-benchmark"
-version = "2.0.0"
+version = "2.0.1"
 description = "Reproducible benchmark of PyTorch vs ONNX Runtime (FP32/FP16/static INT8) edge-vision inference: latency, stability, parity, task quality, and quantization-aware post-processing"
 readme = "README.md"
 license = { text = "Apache-2.0" }

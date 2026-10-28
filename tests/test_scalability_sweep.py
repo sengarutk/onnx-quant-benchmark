@@ -3,8 +3,6 @@ Unit tests for Scalability Sweeps across Batch Dimensions and Resolutions.
 """
 
 from pathlib import Path
-import pytest
-import torch
 
 from src.experiments.run_scalability_sweep import run_scalability_sweeps
 

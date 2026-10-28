@@ -6,7 +6,6 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, Union
 import onnx
-import numpy as np
 
 
 def inspect_onnx_graph(onnx_path: Union[str, Path]) -> Dict[str, Any]:

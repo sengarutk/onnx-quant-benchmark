@@ -95,7 +95,8 @@ thresholds and with each model's own calibrated thresholds.
 ## 6. Memory
 
 `torch.cuda.max_memory_allocated` (PyTorch CUDA runs only; it does not see ONNX Runtime or TensorRT allocations),
-process RSS after the run (`psutil`), and serialized model file size.
+process RSS after the run (`psutil`), and serialized model file size. All memory and size figures are in binary
+megabytes: MB = 2^20 bytes (MiB).
 
 ## 7. Known limitations
 

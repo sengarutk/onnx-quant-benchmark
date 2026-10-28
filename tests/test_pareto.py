@@ -3,7 +3,6 @@ Unit tests for 2D Non-Dominated Pareto Frontier Extraction.
 """
 
 import pandas as pd
-import pytest
 
 from src.analysis.pareto import identify_pareto_frontier, get_model_pareto_summary
 

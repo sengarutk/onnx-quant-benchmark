@@ -4,7 +4,7 @@ Direct TensorRT Execution Engine with CUDA streams and TensorRT 10.x / 8.x compa
 
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Tuple, Union
 import numpy as np
 import torch
 

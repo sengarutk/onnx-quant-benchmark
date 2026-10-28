@@ -5,7 +5,7 @@ TensorRT Engine Compilation & Plan Serialization utility.
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 import torch
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
